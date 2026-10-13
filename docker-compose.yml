@@ -1,0 +1,20 @@
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: customer_hub
+    ports:
+      # POSTGRES_HOST_PORT lets a machine with something else already on 5432
+      # (e.g. another project's own Postgres container) remap the host side
+      # without changing anything inside the container or in .env.example's
+      # documented default.
+      - "${POSTGRES_HOST_PORT:-5432}:5432"
+    volumes:
+      - customer-hub-postgres:/var/lib/postgresql/data
+      - ./docker/initdb:/docker-entrypoint-initdb.d
+
+volumes:
+  customer-hub-postgres:

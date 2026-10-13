@@ -1,0 +1,30 @@
+import { defineConfig, globalIgnores } from "eslint/config";
+import nextVitals from "eslint-config-next/core-web-vitals";
+import nextTs from "eslint-config-next/typescript";
+
+const eslintConfig = defineConfig([
+  ...nextVitals,
+  ...nextTs,
+  // Override default ignores of eslint-config-next.
+  globalIgnores([
+    // Default ignores of eslint-config-next:
+    ".next/**",
+    "out/**",
+    "build/**",
+    "next-env.d.ts",
+    // E2E-5's second `next dev` instance (brief 7.3.2) builds into its own
+    // distDir, next.config.ts's NEXT_DIST_DIR, to avoid corrupting the
+    // main server's `.next` cache -- same reason it needs ignoring here.
+    ".next-e2e-issues/**",
+    // Milestone 8 live fix: demo-clock-zones.spec.ts's production build
+    // (`next build && next start`), same reason as .next-e2e-issues above.
+    ".next-e2e-zones/**",
+    // demo-clock-writes bug fix: demo-clock-skew.spec.ts's own production
+    // build, same reason as .next-e2e-zones above.
+    ".next-e2e-skew/**",
+    // Role actions PR: its own production build, same reason as .next-e2e-skew above.
+    ".next-e2e-roles/**",
+  ]),
+]);
+
+export default eslintConfig;

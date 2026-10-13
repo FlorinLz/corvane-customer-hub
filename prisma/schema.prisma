@@ -1,0 +1,1355 @@
+// prisma/schema.prisma: Customer Hub
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+// Prisma 7: the connection URL lives in prisma.config.ts (for Migrate) and
+// in the driver adapter passed to PrismaClient (for the running app),
+// src/server/db.ts / db-admin.ts. `datasource.url` is no longer valid here.
+datasource db {
+  provider   = "postgresql"
+  extensions = [pg_trgm]
+}
+
+// ───────────── Enums (display labels in section 3.3) ─────────────
+
+enum Team {
+  SALES
+  OPS
+  CS
+  NETWORK
+  COMPLIANCE
+  FINANCE
+}
+
+enum EntityType {
+  BANK
+  FINTECH
+  PSP
+}
+
+enum LeiStatus {
+  ISSUED
+  LAPSED
+  RETIRED
+  MERGED
+  ANNULLED
+  DUPLICATE
+  PENDING_TRANSFER
+  PENDING_ARCHIVAL
+  NOT_VERIFIED // "Not verified with GLEIF"
+}
+
+enum GleifSource {
+  LIVE
+  CACHE
+  MANUAL
+}
+
+enum LifecycleState {
+  ONBOARDING
+  LIVE
+  BAU
+  INACTIVE
+}
+
+enum GroupDecision {
+  NOT_SET
+  GROUP
+  STANDALONE
+}
+
+enum Scheme {
+  EU_VOP
+  UK_COP
+  GLOBAL_VALIDATION
+}
+
+enum Stage {
+  CONTRACT_SIGNED
+  KICKOFF
+  SANDBOX_TECHNICAL_INTEGRATION
+  TESTING_CERTIFICATION
+  UAT
+  GO_LIVE_APPROVAL
+  LIVE_HYPERCARE
+  RAMP_UP
+  BAU
+}
+
+enum BlockedBy {
+  CUSTOMER
+  INTERNAL
+  PARTNER
+}
+
+enum StageEventKind {
+  PRODUCT_ADDED
+  PRODUCT_EDITED
+  STAGE_FORWARD
+  STAGE_SKIP
+  STAGE_BACKWARD
+  BLOCK_SET
+  BLOCK_EDITED
+  BLOCK_RESOLVED
+  TARGET_DATE_CHANGED
+  PRODUCT_CANCELLED
+}
+
+enum ConnectionMethod {
+  DIRECT
+  VIA_SCHEME
+  VIA_ROUTING_PROVIDER
+}
+
+enum CoverageStatus {
+  ONBOARDING
+  ACTIVE
+  DEGRADED
+  SUSPENDED
+  RETIRED
+}
+
+enum ContractKind {
+  CUSTOMER_CONTRACT
+  PARTNER_AGREEMENT
+}
+
+enum ContractScope {
+  ENTITY_CONTRACT
+  GROUP_MASTER_AGREEMENT
+}
+
+enum Currency {
+  EUR
+  GBP
+  USD
+}
+
+enum ContactContext {
+  CUSTOMER
+  PARTNER
+}
+
+enum ContactRole {
+  CHAMPION
+  DECISION_MAKER
+  TECHNICAL
+  INCIDENT
+  ESCALATION
+  BILLING
+}
+
+enum ContactStatus {
+  ACTIVE
+  LEFT
+}
+
+enum KybCheckType {
+  LICENCE
+  LEI
+  OWNERSHIP_STRUCTURE
+  SANCTIONS_SCREENING
+}
+
+enum SanctionsResult {
+  NO_MATCH
+  POTENTIAL_MATCH_UNDER_REVIEW
+  CONFIRMED_MATCH
+}
+
+enum ReviewStatus {
+  PLANNED
+  IN_PROGRESS
+  COMPLETED
+  OVERDUE // never written by a user; derived at read time (M12 AC12)
+}
+
+enum ObligationCardKind {
+  CUSTOMER_AGREEMENT
+  PARTNER_AGREEMENT
+}
+
+enum SchemeAdherence {
+  NOT_APPLICABLE
+  NOT_STARTED
+  IN_PROGRESS
+  ADHERED
+  SUSPENDED
+  WITHDRAWN
+}
+
+enum HandoffType {
+  SALES_TO_OPS
+  OPS_TO_CS
+}
+
+enum HandoffStatus {
+  SENT
+  CONFIRMED
+  ACCEPTED
+  DECLINED
+  CANCELLED
+}
+
+enum NoteType {
+  CALL
+  QBR
+  NEGOTIATION
+  INCIDENT
+  PAYMENT
+  OTHER
+}
+
+enum ParticipantKind {
+  USER
+  CONTACT
+  FREE_TEXT
+}
+
+enum ActionItemStatus {
+  OPEN
+  DONE
+}
+
+enum HistoryCategory {
+  STAGE_CHANGE
+  CONTACT_CHANGE
+  HANDOFF
+  OWNER_REASSIGNED
+  NETWORK_AND_STRUCTURE
+  OTHER_FIELD_CHANGES
+  INCIDENT
+}
+
+enum AuditObjectType {
+  LEGAL_ENTITY
+  GROUP
+  CUSTOMER_ROLE
+  PARTNER_ROLE
+  COVERAGE_ROW
+  CONTRACT
+  CONTRACTED_PRODUCT
+  CONTACT
+  KYB_CHECK
+  PERIODIC_REVIEW
+  OBLIGATIONS
+  BILLING_PROFILE
+  HANDOFF
+  NOTE
+  ACTION_ITEM
+  OWNER_ASSIGNMENT
+  USER
+  ISSUE
+}
+
+enum AuditSource {
+  USER
+  SYSTEM_GLEIF
+  SYSTEM_ISSUE
+}
+
+// ───────────── Issue flow enums (labels in 3.3.5) ─────────────
+
+enum IssueType {
+  SERVICE_UNAVAILABLE // "Service unavailable or latency"
+  PARTNER_DEGRADED // "Partner degraded or unavailable"
+  WRONG_MATCH // "Wrong match result"
+  INTEGRATION_BLOCKER // "Integration blocker"
+  BILLING // "Billing"
+  DATA_BREACH_SECURITY // "Possible data breach or security"
+  COMMERCIAL_COVERAGE // "Commercial or coverage"
+  OTHER // "Other"
+}
+
+enum Severity {
+  SEV1
+  SEV2
+  SEV3
+  SEV4
+}
+
+enum IssueStatus {
+  NEW
+  IN_PROGRESS
+  WAITING_ON_CUSTOMER
+  WAITING_ON_PARTNER
+  RESOLVED
+  CLOSED
+}
+
+enum IssueImpact {
+  DOWN
+  DEGRADED
+  ISOLATED_CASE
+  QUESTION_OR_REQUEST
+}
+
+enum IssueReporterKind {
+  USER
+  MONITORING // "Monitoring (automatic)", seed only (ISS-1042)
+}
+
+enum CustomerReporterKind {
+  CONTACT
+  SOMEONE_ELSE
+  FOUND_INTERNALLY
+}
+
+enum RoutingRule {
+  NAMED_PERSON // rule 2
+  ON_CALL_IN_HOURS // rule 2, no named person
+  ON_CALL_OUT_OF_HOURS // rule 3
+  QUEUED_FOR_BUSINESS_HOURS // rule 4
+  INHERITED_FROM_PARENT // rule 7, linked issue
+  COMPLIANCE_ON_CALL // Sev-1 out of hours for an owner team without on-call: the Compliance on-call person (4.9.2)
+  BACKUP_FOR_ABSENT // R2, M18 AC12
+}
+
+enum CommunicatorRule {
+  CUSTOMER_OWNER // default (M18 AC7)
+  ISSUE_OWNER_PARTNER // partner issue (rule 7)
+  ISSUE_OWNER_UNTIL_HANDOVER // rules 3 and 3b, until Issue.handoverAt
+  TAKEN_OVER // R2, M22 AC17
+}
+
+enum CommunicationType {
+  FIRST_NOTIFICATION
+  UPDATE
+  FACTS_PACK_SENT // R2
+  BREACH_NOTIFICATION // R2
+  CLOSURE_CONFIRMED
+  ROOT_CAUSE_REPORT_SENT // R2
+  SYSTEM // hand-over, communicator change, reopen, automatic close (grey, actor "Customer Hub")
+}
+
+enum CommunicationChannel {
+  EMAIL
+  PHONE
+  VIDEO_CALL
+  CHAT
+}
+
+enum AwarenessSource {
+  EMAIL
+  PHONE
+  CHAT
+  MONITORING
+  INTERNAL
+}
+
+enum IssueNoteKind {
+  NOTE
+  ADDED_REPORT // "Also reported by <name> (<team>)", M17 AC6
+  SYSTEM // hand-over, "Resolved with partner issue ...", communicator change
+}
+
+enum IssueLinkKind {
+  CREATED // created from the partner issue, follows the parent's owner (M23 AC7, AC17)
+  ATTACHED // existing customer issue, keeps its own owner (M23 AC8)
+}
+
+enum AssessmentOutcome {
+  POSSIBLE_MAJOR_INCIDENT
+  POSSIBLE_DATA_BREACH
+  NEITHER
+}
+
+enum RegulatoryRegime {
+  EU_DORA
+  UK_FCA
+  UNITED_STATES
+  SINGAPORE_MAS
+  UAE_CBUAE
+  OTHER
+  NONE
+}
+
+enum UserChangeKind {
+  USER_ADDED
+  TEAM_CHANGED
+}
+
+// ───────────── Users ─────────────
+
+model User {
+  id          String    @id @default(cuid())
+  name        String    @db.VarChar(120)
+  email       String    @unique @db.VarChar(254) // stored lowercase
+  team        Team
+  isAdmin     Boolean   @default(false)
+  active      Boolean   @default(true) // no inactive users in the seed (resolution 6)
+  timeZone    String    @default("Europe/Bucharest") @db.VarChar(64) // IANA (3.2.6.2, B17)
+  absentUntil DateTime? @db.Date // R2
+  createdAt   DateTime  @default(now()) @db.Timestamptz(3)
+
+  ownedEntities          Entity[]               @relation("EntityOwner")
+  createdEntities        Entity[]               @relation("EntityCreatedBy")
+  deletedEntities        Entity[]               @relation("EntityDeletedBy")
+  createdCustomerRoles   CustomerRole[]         @relation("CustomerRoleCreatedBy")
+  stageEvents            StageEvent[]           @relation("StageEventUser")
+  coverageChanges        CoverageStatusChange[] @relation("CoverageChangeUser")
+  verifiedContacts       Contact[]              @relation("ContactVerifiedBy")
+  verifiedKybChecks      KybCheck[]             @relation("KybVerifiedBy")
+  updatedObligationCards ObligationCard[]       @relation("ObligationUpdatedBy")
+  handoffsSent           Handoff[]              @relation("HandoffFrom")
+  handoffsReceived       Handoff[]              @relation("HandoffTo")
+  handoffsCancelled      Handoff[]              @relation("HandoffCancelledBy")
+  notes                  Note[]                 @relation("NoteAuthor")
+  noteParticipations     NoteParticipant[]      @relation("NoteParticipantUser")
+  actionItemsOwned       ActionItem[]           @relation("ActionItemOwner")
+  actionItemsToggled     ActionItem[]           @relation("ActionItemStatusChangedBy")
+  historyEvents          HistoryEvent[]         @relation("HistoryActor")
+  assignmentsReceived    OwnerAssignment[]      @relation("AssignmentAssignee")
+  assignmentsMade        OwnerAssignment[]      @relation("AssignmentAssignedBy")
+  assignmentsLost        OwnerAssignment[]      @relation("AssignmentPreviousOwner")
+  auditEntries           AuditEntry[]           @relation("AuditUser")
+  teamChanges            UserTeamChange[]       @relation("TeamChangeUser")
+  teamChangesMade        UserTeamChange[]       @relation("TeamChangeChangedBy")
+
+  // Issue flow (3.2.6.2, B17)
+  issuesReported                Issue[]                @relation("IssueReporter")
+  issuesOwned                   Issue[]                @relation("IssueOwner")
+  issuesAcknowledged            Issue[]                @relation("IssueAcknowledgedBy")
+  issuesClosed                  Issue[]                @relation("IssueClosedBy")
+  issuesToAssess                Issue[]                @relation("IssueComplianceAssessor")
+  issuesTakenOver               Issue[]                @relation("IssueTakenOverBy")
+  issueResolutions              IssueResolution[]      @relation("IssueResolutionBy")
+  issueGroupReports             IssueGroupReport[]     @relation("IssueGroupReportBy")
+  issueContributions            IssueContributor[]     @relation("IssueContributorUser")
+  issueNotes                    IssueNote[]            @relation("IssueNoteAuthor")
+  issueCommunications           IssueCommunication[]   @relation("IssueCommunicationRecordedBy")
+  complianceAssessments         ComplianceAssessment[] @relation("ComplianceAssessmentBy")
+  rootCauseReportsSent          RootCauseReportTask[]  @relation("RootCauseReportSentBy")
+  rootCauseReportsApproved      RootCauseReportTask[]  @relation("RootCauseReportApprovedBy")
+  rootCauseReportDrafts         RootCauseReportTask[]  @relation("RootCauseReportDraftBy")
+  rootCauseReportChangeRequests RootCauseReportTask[]  @relation("RootCauseReportChangesBy")
+  issueTimeCorrections          IssueTimeCorrection[]  @relation("IssueTimeCorrectedBy")
+  issueTeamMemberships          IssueTeamMember[]      @relation("IssueTeamMemberUser")
+  issueTeamBackups              IssueTeamMember[]      @relation("IssueTeamMemberBackup")
+  onCallShifts                  OnCallShift[]          @relation("OnCallShiftUser")
+
+  @@index([team, active])
+}
+
+model UserTeamChange {
+  id          String         @id @default(cuid())
+  userId      String
+  user        User           @relation("TeamChangeUser", fields: [userId], references: [id])
+  kind        UserChangeKind
+  oldTeam     Team? // null for USER_ADDED
+  newTeam     Team
+  changedById String
+  changedBy   User           @relation("TeamChangeChangedBy", fields: [changedById], references: [id])
+  changedAt   DateTime       @default(now()) @db.Timestamptz(3)
+
+  @@index([changedAt(sort: Desc)])
+}
+
+// ───────────── Groups and entities ─────────────
+
+model Group {
+  id                   String             @id @default(cuid())
+  name                 String             @db.VarChar(200)
+  nameNormalized       String             @unique @db.VarChar(200) // M4 AC6 uniqueness
+  parentLei            String?            @db.Char(20)
+  parentLegalName      String?            @db.VarChar(200)
+  parentLeiStatus      LeiStatus? // NOT_VERIFIED when GLEIF was unreachable
+  parentGleifCheckedAt DateTime?          @db.Timestamptz(3)
+  hqCountry            String             @db.Char(2)
+  version              Int                @default(0)
+  createdAt            DateTime           @default(now()) @db.Timestamptz(3)
+  updatedAt            DateTime           @updatedAt @db.Timestamptz(3)
+  entities             Entity[]
+  contracts            Contract[]
+  auditEntries         AuditEntry[]
+  issueGroupReports    IssueGroupReport[]
+
+  @@index([parentLei])
+}
+
+model Entity {
+  id              String      @id @default(cuid())
+  legalName       String      @db.VarChar(200)
+  legalNameSearch String      @db.VarChar(200) // normalised, legal forms kept (3.7)
+  legalNameCore   String      @db.VarChar(200) // normalised, legal forms removed (3.6)
+  type            EntityType? // nullable only for legacy seed rows (M11 AC9)
+  country         String?     @db.Char(2)
+  lei             String?     @db.Char(20) // not unique: duplicates are warned, never blocked (M2 AC12, M16 AC15)
+
+  // GLEIF snapshot of the entity LEI (M2 AC5, AC7, M12 AC3)
+  leiStatus               LeiStatus?
+  gleifRawStatus          String?      @db.VarChar(40)
+  leiNextRenewalDate      DateTime?    @db.Date
+  gleifCheckedAt          DateTime?    @db.Timestamptz(3)
+  gleifSource             GleifSource?
+  gleifLegalName          String?      @db.VarChar(300)
+  gleifCountry            String?      @db.Char(2)
+  gleifDirectParentLei    String?      @db.Char(20)
+  gleifDirectParentName   String?      @db.VarChar(300)
+  gleifUltimateParentLei  String?      @db.Char(20)
+  gleifUltimateParentName String?      @db.VarChar(300)
+  gleifSuccessorLei       String?      @db.Char(20)
+
+  groupId       String?
+  group         Group?        @relation(fields: [groupId], references: [id])
+  groupDecision GroupDecision @default(NOT_SET) // "Group not set" when NOT_SET (M4 AC15)
+
+  lifecycleState LifecycleState @default(ONBOARDING) // recomputed in every product, coverage and role write (M6 AC12, decision B1)
+  inactiveReason String?        @db.VarChar(500)
+
+  ownerId    String?
+  owner      User?     @relation("EntityOwner", fields: [ownerId], references: [id])
+  ownerSince DateTime? @db.Timestamptz(3)
+
+  createdById String?
+  createdBy   User?   @relation("EntityCreatedBy", fields: [createdById], references: [id])
+
+  deletedAt    DateTime? @db.Timestamptz(3)
+  deletedById  String?
+  deletedBy    User?     @relation("EntityDeletedBy", fields: [deletedById], references: [id])
+  deleteReason String?   @db.VarChar(500)
+
+  version   Int      @default(0)
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  aliases           EntityAlias[]
+  bics              EntityBic[]
+  customerRole      CustomerRole?
+  partnerRole       PartnerRole?
+  products          ContractedProduct[] @relation("ProductCustomerEntity")
+  contractingFor    ContractedProduct[] @relation("ProductContractingEntity")
+  contractsHeld     Contract[]          @relation("ContractHolderEntity")
+  contractsInvoiced Contract[]          @relation("ContractInvoicedEntity")
+  contacts          Contact[]
+  kybChecks         KybCheck[]
+  periodicReview    PeriodicReview?
+  obligationCards   ObligationCard[]
+  billingProfile    BillingProfile?
+  handoffs          Handoff[]
+  notes             Note[]
+  historyEvents     HistoryEvent[]
+  ownerAssignments  OwnerAssignment[]
+  auditEntries      AuditEntry[]
+  issues            Issue[]
+  issueTeam         IssueTeamMember[]
+
+  @@index([lei])
+  @@index([lei(ops: raw("bpchar_pattern_ops"))], map: "Entity_lei_prefix_idx")
+  @@index([legalNameSearch(ops: raw("gin_trgm_ops"))], type: Gin, map: "Entity_legalNameSearch_trgm_idx")
+  @@index([legalNameCore(ops: raw("gin_trgm_ops"))], type: Gin, map: "Entity_legalNameCore_trgm_idx")
+  @@index([legalNameCore])
+  @@index([groupId])
+  @@index([ownerId])
+  @@index([createdById])
+  @@index([deletedAt])
+  @@index([lifecycleState])
+  @@index([country])
+}
+
+model EntityAlias {
+  id          String @id @default(cuid())
+  entityId    String
+  entity      Entity @relation(fields: [entityId], references: [id])
+  alias       String @db.VarChar(100)
+  aliasSearch String @db.VarChar(100)
+  aliasCore   String @db.VarChar(100)
+
+  @@unique([entityId, aliasSearch])
+  @@index([aliasSearch(ops: raw("gin_trgm_ops"))], type: Gin, map: "EntityAlias_aliasSearch_trgm_idx")
+  @@index([aliasCore(ops: raw("gin_trgm_ops"))], type: Gin, map: "EntityAlias_aliasCore_trgm_idx")
+  @@index([aliasCore])
+}
+
+model EntityBic {
+  id       String @id @default(cuid())
+  entityId String
+  entity   Entity @relation(fields: [entityId], references: [id])
+  bic      String @db.VarChar(11) // uppercase, 8 or 11
+  bic8     String @db.Char(8)
+
+  @@unique([entityId, bic])
+  @@index([bic8])
+  @@index([bic])
+}
+
+// ───────────── Roles and contracts ─────────────
+
+model CustomerRole {
+  id          String  @id @default(cuid())
+  entityId    String  @unique
+  entity      Entity  @relation(fields: [entityId], references: [id])
+  active      Boolean @default(true) // false = role removed, data kept (M4 AC8)
+  createdById String? // Sales user who added the role; scopes Sales worklists (M11 AC3)
+  createdBy   User?   @relation("CustomerRoleCreatedBy", fields: [createdById], references: [id])
+
+  // Applicable contract (Ops, M4 AC9-AC10, D1)
+  contractId String?
+  contract   Contract? @relation("CustomerRoleContract", fields: [contractId], references: [id])
+
+  // Renewal date (CS)
+  renewalDate DateTime? @db.Date
+
+  // Handoff summary (Sales, M3 AC4, AC6, AC7, AC9)
+  slaAvailabilityPct  Decimal? @db.Decimal(5, 2)
+  slaMaxResponseMs    Int?
+  slaOther            String?  @db.VarChar(1000)
+  specialTerms        String?  @db.VarChar(2000)
+  entitiesNotInPortal String?  @db.VarChar(1000)
+  notesForOnboarding  String?  @db.VarChar(2000)
+
+  // Commercial terms (Sales and Finance, M3 AC5, D3)
+  currency             Currency?
+  pricePerVerification Decimal?     @db.Decimal(12, 4)
+  monthlyMinimum       Decimal?     @db.Decimal(14, 2)
+  paymentTermDays      Int?
+  volumeTiers          VolumeTier[]
+
+  version   Int      @default(0)
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([contractId])
+  @@index([renewalDate])
+}
+
+model VolumeTier {
+  id                   String       @id @default(cuid())
+  customerRoleId       String
+  customerRole         CustomerRole @relation(fields: [customerRoleId], references: [id], onDelete: Cascade)
+  position             Int
+  fromVolume           Int
+  toVolume             Int? // empty on the last tier only
+  pricePerVerification Decimal      @db.Decimal(12, 4)
+
+  @@unique([customerRoleId, position])
+}
+
+model PartnerRole {
+  id                 String            @id @default(cuid())
+  entityId           String            @unique
+  entity             Entity            @relation(fields: [entityId], references: [id])
+  active             Boolean           @default(true)
+  connectionMethod   ConnectionMethod?
+  providerName       String?           @db.VarChar(120)
+  partnerAgreementId String?
+  partnerAgreement   Contract?         @relation("PartnerRoleAgreement", fields: [partnerAgreementId], references: [id])
+  coverage           PartnerCoverage[]
+  version            Int               @default(0)
+  createdAt          DateTime          @default(now()) @db.Timestamptz(3)
+  updatedAt          DateTime          @updatedAt @db.Timestamptz(3)
+}
+
+model PartnerCoverage {
+  id            String                 @id @default(cuid())
+  partnerRoleId String
+  partnerRole   PartnerRole            @relation(fields: [partnerRoleId], references: [id])
+  country       String                 @db.Char(2)
+  scheme        Scheme
+  statusChanges CoverageStatusChange[] // current and scheduled status are derived from this list (3.2 notes)
+  version       Int                    @default(0)
+  createdAt     DateTime               @default(now()) @db.Timestamptz(3)
+
+  @@unique([partnerRoleId, country, scheme]) // M5 AC5
+  @@index([country, scheme])
+}
+
+model CoverageStatusChange {
+  id            String          @id @default(cuid())
+  coverageId    String
+  coverage      PartnerCoverage @relation(fields: [coverageId], references: [id])
+  status        CoverageStatus
+  effectiveDate DateTime        @db.Date // up to today + 30 (M5 AC17)
+  reason        String          @db.VarChar(500)
+  userId        String
+  user          User            @relation("CoverageChangeUser", fields: [userId], references: [id])
+  createdAt     DateTime        @default(now()) @db.Timestamptz(3)
+
+  @@index([coverageId, effectiveDate(sort: Desc), createdAt(sort: Desc)])
+}
+
+model Contract {
+  id               String         @id @default(cuid())
+  contractId       String         @unique @db.VarChar(50) // e.g. IPE-MSA-2026-014, matched case-insensitively
+  kind             ContractKind
+  title            String         @db.VarChar(200)
+  signingDate      DateTime       @db.Date
+  scope            ContractScope
+  documentUrl      String         @db.VarChar(2048)
+  groupId          String? // set for GROUP_MASTER_AGREEMENT
+  group            Group?         @relation(fields: [groupId], references: [id])
+  holderEntityId   String // entity it was first attached to; search target for ENTITY_CONTRACT (M1 AC18)
+  holderEntity     Entity         @relation("ContractHolderEntity", fields: [holderEntityId], references: [id])
+  invoicedEntityId String? // customer contracts only (M4 AC9); null for partner agreements (M4 AC11)
+  invoicedEntity   Entity?        @relation("ContractInvoicedEntity", fields: [invoicedEntityId], references: [id])
+  customerRoles    CustomerRole[] @relation("CustomerRoleContract")
+  partnerRoles     PartnerRole[]  @relation("PartnerRoleAgreement")
+  version          Int            @default(0)
+  createdAt        DateTime       @default(now()) @db.Timestamptz(3)
+  updatedAt        DateTime       @updatedAt @db.Timestamptz(3)
+
+  @@index([groupId])
+  @@index([contractId(ops: raw("varchar_pattern_ops"))], map: "Contract_contractId_prefix_idx")
+}
+
+// ───────────── Products and stages ─────────────
+
+model ContractedProduct {
+  id                  String    @id @default(cuid())
+  entityId            String // the customer record that holds the band (M6 AC21)
+  entity              Entity    @relation("ProductCustomerEntity", fields: [entityId], references: [id])
+  contractingEntityId String
+  contractingEntity   Entity    @relation("ProductContractingEntity", fields: [contractingEntityId], references: [id])
+  product             Scheme
+  country             String    @db.Char(2)
+  stage               Stage     @default(CONTRACT_SIGNED)
+  stageEnteredAt      DateTime  @db.Date
+  skippedStages       Stage[] // stages shown as "Skipped" on the band (M6 AC5)
+  targetGoLive        DateTime  @db.Date
+  billableFrom        DateTime? @db.Date // entry date of Live & hypercare (M6 AC11)
+
+  // Open block (M6 AC7-AC9). Closed blocks live in StageEvent.
+  blockedBy     BlockedBy?
+  blockedReason String?    @db.VarChar(500)
+  blockedSince  DateTime?  @db.Date
+
+  cancelledAt  DateTime? @db.Date
+  cancelReason String?   @db.VarChar(500)
+
+  stageEvents StageEvent[]
+  issues      Issue[]
+  version     Int          @default(0)
+  createdAt   DateTime     @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime     @updatedAt @db.Timestamptz(3)
+
+  @@unique([entityId, product, country, contractingEntityId]) // M3 AC2
+  @@index([contractingEntityId])
+  @@index([stage, stageEnteredAt])
+  @@index([targetGoLive])
+  @@index([blockedSince])
+  @@index([country, product, stage])
+}
+
+model StageEvent {
+  id              String            @id @default(cuid())
+  productId       String
+  product         ContractedProduct @relation(fields: [productId], references: [id])
+  kind            StageEventKind
+  fromStage       Stage?
+  toStage         Stage?
+  entryDate       DateTime?         @db.Date
+  skippedStages   Stage[]
+  note            String?           @db.VarChar(500)
+  reason          String?           @db.VarChar(500)
+  blockedBy       BlockedBy?
+  blockDays       Int? // set on BLOCK_RESOLVED (M6 AC8)
+  oldTargetGoLive DateTime?         @db.Date
+  newTargetGoLive DateTime?         @db.Date
+  userId          String
+  user            User              @relation("StageEventUser", fields: [userId], references: [id])
+  createdAt       DateTime          @default(now()) @db.Timestamptz(3)
+
+  @@index([productId, createdAt])
+}
+
+// ───────────── Contacts ─────────────
+
+model Contact {
+  id                       String                @id @default(cuid())
+  entityId                 String
+  entity                   Entity                @relation(fields: [entityId], references: [id])
+  context                  ContactContext
+  role                     ContactRole
+  ownerTeams               Team[] // set from (context, role) on create and on role change only (M15 AC4, edge cases 3-4)
+  fullName                 String                @db.VarChar(120)
+  email                    String                @db.VarChar(254) // lowercase
+  phone                    String?               @db.VarChar(16) // E.164
+  timeZone                 String?               @db.VarChar(64) // IANA
+  available24x7            Boolean               @default(false)
+  availabilityDays         Int[] // ISO weekday 1 = Monday ... 7 = Sunday
+  availabilityStart        String?               @db.Char(5) // "HH:MM"
+  availabilityEnd          String?               @db.Char(5) // may be earlier than start: crosses midnight (M7 edge 2)
+  jobTitle                 String?               @db.VarChar(120)
+  status                   ContactStatus         @default(ACTIVE)
+  leftOn                   DateTime?             @db.Date
+  leftNote                 String?               @db.VarChar(500)
+  isPrimary                Boolean               @default(false) // Incident contacts only (M7 AC9)
+  lastVerifiedAt           DateTime?             @db.Date
+  lastVerifiedById         String?
+  lastVerifiedBy           User?                 @relation("ContactVerifiedBy", fields: [lastVerifiedById], references: [id])
+  participations           NoteParticipant[]
+  issuesReportedAtCustomer Issue[]               @relation("IssueCustomerReporter")
+  issueCommunications      IssueCommunication[]  @relation("IssueCommunicationContact")
+  rootCauseReportsReceived RootCauseReportTask[] @relation("RootCauseReportContact")
+  version                  Int                   @default(0)
+  createdAt                DateTime              @default(now()) @db.Timestamptz(3)
+  updatedAt                DateTime              @updatedAt @db.Timestamptz(3)
+
+  @@index([entityId, context, role, status])
+  @@index([entityId, email])
+  @@index([role, status, lastVerifiedAt])
+}
+
+// ───────────── Compliance ─────────────
+
+model KybCheck {
+  id               String           @id @default(cuid())
+  entityId         String
+  entity           Entity           @relation(fields: [entityId], references: [id])
+  type             KybCheckType
+  // Licence (M12 AC2)
+  licenceNumber    String?          @db.VarChar(50)
+  issuingAuthority String?          @db.VarChar(120)
+  expiryDate       DateTime?        @db.Date // Licence only; LEI expiry = Entity.leiNextRenewalDate
+  noExpiry         Boolean          @default(false)
+  // Ownership structure (M12 AC4)
+  ownershipSummary String?          @db.VarChar(2000)
+  parentEntityName String?          @db.VarChar(200)
+  // Sanctions screening (M12 AC5)
+  sanctionsResult  SanctionsResult?
+  sanctionsLists   String?          @db.VarChar(200)
+  // Verification metadata (M12 AC6)
+  verifiedById     String?
+  verifiedBy       User?            @relation("KybVerifiedBy", fields: [verifiedById], references: [id])
+  verifiedOn       DateTime?        @db.Date
+  evidenceUrl      String?          @db.VarChar(2048)
+  version          Int              @default(0)
+  updatedAt        DateTime         @updatedAt @db.Timestamptz(3)
+
+  @@unique([entityId, type])
+  @@index([type, expiryDate])
+}
+
+model PeriodicReview {
+  id             String       @id @default(cuid())
+  entityId       String       @unique
+  entity         Entity       @relation(fields: [entityId], references: [id])
+  status         ReviewStatus // stored values: PLANNED or IN_PROGRESS
+  pastDue        Boolean      @default(false) // "Past due" marker (M12 AC12)
+  lastReviewDate DateTime?    @db.Date
+  nextReviewDate DateTime     @db.Date
+  version        Int          @default(0)
+  updatedAt      DateTime     @updatedAt @db.Timestamptz(3)
+
+  @@index([nextReviewDate])
+}
+
+model ObligationCard {
+  id                     String             @id @default(cuid())
+  entityId               String
+  entity                 Entity             @relation(fields: [entityId], references: [id])
+  kind                   ObligationCardKind
+  incidentNoticeHours    Int?
+  subprocessorNoticeDays Int?
+  auditRight             Boolean?
+  availabilitySlaPct     Decimal?           @db.Decimal(5, 2)
+  euVopStatus            SchemeAdherence?
+  ukCopStatus            SchemeAdherence?
+  expiryDate             DateTime?          @db.Date
+  contractUrl            String?            @db.VarChar(2048)
+  // Regulatory block (M26), Customer agreement cards only (checked in 3.2.6.4)
+  regulatoryRegime       RegulatoryRegime?
+  regimeName             String?            @db.VarChar(100) // Other only
+  regulatorDeadline      String?            @db.VarChar(300) // information only
+  factsNeededHours       Int? // 1 to 72
+  postIncidentReportDays Int? // R2, 1 to 90
+  updatedById            String?
+  updatedBy              User?              @relation("ObligationUpdatedBy", fields: [updatedById], references: [id])
+  version                Int                @default(0)
+  updatedAt              DateTime           @updatedAt @db.Timestamptz(3)
+
+  @@unique([entityId, kind])
+  @@index([subprocessorNoticeDays])
+  @@index([incidentNoticeHours])
+}
+
+// ───────────── Billing ─────────────
+
+model BillingProfile {
+  id                    String   @id @default(cuid())
+  entityId              String   @unique
+  entity                Entity   @relation(fields: [entityId], references: [id])
+  billingLegalName      String?  @db.VarChar(200)
+  street                String?  @db.VarChar(200)
+  city                  String?  @db.VarChar(100)
+  postalCode            String?  @db.VarChar(20)
+  country               String?  @db.Char(2)
+  vatId                 String?  @db.VarChar(40) // stored stripped and uppercase
+  lei                   String?  @db.VarChar(20)
+  contractingEntity String?  @db.VarChar(100) // free string so removed options survive (M14 edge 5)
+  version               Int      @default(0)
+  createdAt             DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt             DateTime @updatedAt @db.Timestamptz(3)
+  // "Incomplete for billing" is computed at read time and never stored (M14 AC7)
+}
+
+// ───────────── Handoffs ─────────────
+
+model Handoff {
+  id                String         @id @default(cuid())
+  entityId          String
+  entity            Entity         @relation(fields: [entityId], references: [id])
+  type              HandoffType
+  status            HandoffStatus  @default(SENT)
+  fromUserId        String
+  fromUser          User           @relation("HandoffFrom", fields: [fromUserId], references: [id])
+  toUserId          String
+  toUser            User           @relation("HandoffTo", fields: [toUserId], references: [id])
+  snapshot          Json // SalesToOpsSnapshot or OpsToCsSnapshot (3.2 notes)
+  sentAt            DateTime       @db.Timestamptz(3)
+  confirmedAt       DateTime?      @db.Timestamptz(3) // Sales → Ops
+  acceptedAt        DateTime?      @db.Timestamptz(3) // Ops → CS
+  declinedAt        DateTime?      @db.Timestamptz(3)
+  declineReason     String?        @db.VarChar(500)
+  cancelledAt       DateTime?      @db.Timestamptz(3)
+  cancelledById     String?
+  cancelledBy       User?          @relation("HandoffCancelledBy", fields: [cancelledById], references: [id])
+  cancelReason      String?        @db.VarChar(500)
+  previousHandoffId String? // resend after decline (resolution 35)
+  version           Int            @default(0)
+  createdAt         DateTime       @default(now()) @db.Timestamptz(3)
+  historyEvents     HistoryEvent[]
+
+  @@index([toUserId, status])
+  @@index([fromUserId, type, status])
+  @@index([entityId, type, status])
+}
+
+// ───────────── History, owner, audit ─────────────
+
+model Note {
+  id              String            @id @default(cuid())
+  entityId        String
+  entity          Entity            @relation(fields: [entityId], references: [id])
+  type            NoteType
+  interactionDate DateTime          @db.Date
+  summary         String            @db.VarChar(5000)
+  authorId        String
+  author          User              @relation("NoteAuthor", fields: [authorId], references: [id])
+  authorTeam      Team // team at creation time
+  editedAt        DateTime?         @db.Timestamptz(3)
+  createdAt       DateTime          @default(now()) @db.Timestamptz(3)
+  participants    NoteParticipant[]
+  actionItems     ActionItem[]
+
+  @@index([entityId, createdAt(sort: Desc)])
+}
+
+model NoteParticipant {
+  id           String          @id @default(cuid())
+  noteId       String
+  note         Note            @relation(fields: [noteId], references: [id], onDelete: Cascade)
+  kind         ParticipantKind
+  userId       String?
+  user         User?           @relation("NoteParticipantUser", fields: [userId], references: [id])
+  contactId    String?
+  contact      Contact?        @relation(fields: [contactId], references: [id])
+  nameSnapshot String          @db.VarChar(120) // name as at save time (M10 edge 3)
+
+  @@index([noteId])
+}
+
+model ActionItem {
+  id                String           @id @default(cuid())
+  noteId            String
+  note              Note             @relation(fields: [noteId], references: [id], onDelete: Cascade)
+  position          Int
+  description       String           @db.VarChar(300)
+  ownerId           String
+  owner             User             @relation("ActionItemOwner", fields: [ownerId], references: [id])
+  dueDate           DateTime         @db.Date
+  status            ActionItemStatus @default(OPEN)
+  statusChangedById String?
+  statusChangedBy   User?            @relation("ActionItemStatusChangedBy", fields: [statusChangedById], references: [id])
+  statusChangedAt   DateTime?        @db.Timestamptz(3)
+
+  @@unique([noteId, position])
+  @@index([ownerId, status])
+}
+
+model HistoryEvent {
+  id        String          @id @default(cuid())
+  entityId  String
+  entity    Entity          @relation(fields: [entityId], references: [id])
+  category  HistoryCategory
+  summary   String          @db.VarChar(1000) // rendered sentence, e.g. "EU VoP / DE: UAT → Go-live approval (entered 01 Oct 2026). By Radu Stoica, Ops"
+  details   Json? // [{ field, old, new }] shown inline to non-Compliance teams (M10 AC5)
+  actionId  String // links to the AuditEntry rows of the same write (audit link for Compliance and the admin)
+  handoffId String?
+  handoff   Handoff?        @relation(fields: [handoffId], references: [id])
+  issueId   String?
+  issue     Issue?          @relation(fields: [issueId], references: [id])
+  actorId   String?
+  actor     User?           @relation("HistoryActor", fields: [actorId], references: [id])
+  actorName String          @db.VarChar(120)
+  actorTeam Team?
+  createdAt DateTime        @default(now()) @db.Timestamptz(3)
+
+  @@index([entityId, createdAt(sort: Desc)])
+  @@index([entityId, category])
+  @@index([issueId])
+}
+
+model OwnerAssignment {
+  id              String    @id @default(cuid())
+  entityId        String
+  entity          Entity    @relation(fields: [entityId], references: [id])
+  assigneeId      String
+  assignee        User      @relation("AssignmentAssignee", fields: [assigneeId], references: [id])
+  assignedById    String
+  assignedBy      User      @relation("AssignmentAssignedBy", fields: [assignedById], references: [id])
+  previousOwnerId String?
+  previousOwner   User?     @relation("AssignmentPreviousOwner", fields: [previousOwnerId], references: [id])
+  reason          String    @db.VarChar(500)
+  assignedAt      DateTime  @default(now()) @db.Timestamptz(3)
+  acknowledgedAt  DateTime? @db.Timestamptz(3)
+  supersededAt    DateTime? @db.Timestamptz(3) // set when the entity is reassigned again before acknowledgement (M9 AC11)
+
+  @@index([assigneeId, acknowledgedAt, supersededAt])
+  @@index([entityId])
+}
+
+model AuditEntry {
+  id          BigInt          @id @default(autoincrement())
+  actionId    String // one id per write; groups the per-field rows
+  entityId    String?
+  entity      Entity?         @relation(fields: [entityId], references: [id])
+  groupId     String?
+  group       Group?          @relation(fields: [groupId], references: [id])
+  objectType  AuditObjectType
+  objectId    String
+  objectLabel String          @db.VarChar(300) // e.g. "Contact: Priya Nair (Incident)"
+  field       String          @db.VarChar(120) // display label, e.g. "Expiry date"
+  oldValue    String? // null renders "(none)"
+  newValue    String? // null on removal renders "(removed)"
+  reason      String?         @db.VarChar(2000)
+  source      AuditSource     @default(USER)
+  userId      String?
+  user        User?           @relation("AuditUser", fields: [userId], references: [id])
+  userName    String          @db.VarChar(120) // snapshot
+  userTeam    Team? // team at the time of the change; null for a system write with no team (B36, M21 AC14)
+  createdAt   DateTime        @default(now()) @db.Timestamptz(3)
+
+  @@index([entityId, createdAt(sort: Desc)])
+  @@index([entityId, field])
+  @@index([entityId, userId])
+  @@index([objectType, objectId, createdAt(sort: Desc)])
+  @@index([actionId])
+}
+
+// ───────────── Issues ─────────────
+
+model Issue {
+  id                        String               @id @default(cuid())
+  number                    Int                  @unique @default(dbgenerated("nextval('issue_number_seq')")) // display "ISS-" + 4 digits
+  entityId                  String
+  entity                    Entity               @relation(fields: [entityId], references: [id])
+  productId                 String?
+  product                   ContractedProduct?   @relation(fields: [productId], references: [id])
+  scheme                    Scheme?
+  country                   String?              @db.Char(2)
+  type                      IssueType
+  impact                    IssueImpact
+  possibleBreach            Boolean
+  proposedSeverity          Severity // computed on the server at save (4.9.4); a severity in the request is ignored
+  severity                  Severity
+  severityCapLabel          String?              @db.VarChar(200) // "Sev-3 maximum before go-live: EU VoP / DE is at UAT"
+  stageAtReport             Stage? // stage that decided the cap (M19 AC2, AC3)
+  description               String               @db.VarChar(5000)
+  awareAt               DateTime             @db.Timestamptz(3) // "Corvane aware at": when the signal reached Corvane. Every deadline counts from it
+  eventAt                   DateTime?            @db.Timestamptz(3) // "Event": when the problem started; null = Unknown. eventAt <= awareAt <= createdAt ("Opened")
+  awarenessSource           AwarenessSource      @default(EMAIL)
+  reporterKind              IssueReporterKind    @default(USER)
+  reporterId                String? // null only for MONITORING
+  reporter                  User?                @relation("IssueReporter", fields: [reporterId], references: [id])
+  reporterTeam              Team?
+  customerReporterKind      CustomerReporterKind
+  customerReporterContactId String?
+  customerReporterContact   Contact?             @relation("IssueCustomerReporter", fields: [customerReporterContactId], references: [id])
+  customerReporterName      String?              @db.VarChar(120) // contact name snapshot or the "Someone else" name
+  status                    IssueStatus          @default(NEW)
+
+  // Routing (M18). Effective communicator is computed on read (4.9.7)
+  ownerTeam         Team
+  ownerId           String? // null only while queued with no named person (rule 4)
+  owner             User?            @relation("IssueOwner", fields: [ownerId], references: [id])
+  ownerSince        DateTime?        @db.Timestamptz(3)
+  routingRule       RoutingRule
+  routingReason     String           @db.VarChar(300) // "Why this owner" line
+  communicatorRule  CommunicatorRule @default(CUSTOMER_OWNER)
+  handoverAt        DateTime?        @db.Timestamptz(3) // customer owner's business-hours start (rules 3, 3b)
+  handoverWrittenAt DateTime?        @db.Timestamptz(3) // set by the idempotent system write
+  takenOverById     String? // R2
+  takenOverBy       User?            @relation("IssueTakenOverBy", fields: [takenOverById], references: [id])
+
+  // Clocks (M19): starts and due times are stored when a clock starts or is recalculated; states are computed on read
+  clocksStartAt             DateTime  @db.Timestamptz(3) // save time, or the owner team's next business start (rule 4)
+  ackStartAt                DateTime? @db.Timestamptz(3) // null on CREATED linked issues
+  ackDueAt                  DateTime? @db.Timestamptz(3)
+  acknowledgedAt            DateTime? @db.Timestamptz(3)
+  acknowledgedById          String?
+  acknowledgedBy            User?     @relation("IssueAcknowledgedBy", fields: [acknowledgedById], references: [id])
+  notifyRequired            Boolean // false at Sev-3, Sev-4 and before go-live
+  notifyStartAt             DateTime? @db.Timestamptz(3)
+  notifyTargetHours         Int? // Sev-1: card value read when the clock starts
+  notifyDefaultTarget       Boolean   @default(false) // "Default deadline: the contract has no notification time"
+  notifyTargetBusinessMins  Int? // Sev-2: 240
+  notifyDueAt               DateTime? @db.Timestamptz(3)
+  notifiedAt                DateTime? @db.Timestamptz(3) // first FIRST_NOTIFICATION entry
+  severityRaisedAfterNotice Boolean   @default(false) // M19 edge case 1
+
+  // Compliance flag (M25)
+  complianceFlaggedAt    DateTime? @db.Timestamptz(3)
+  complianceReasons      String[] // reason lines, for example "Sev-1 at a regulated customer (UK FCA)"
+  complianceClockStartAt DateTime? @db.Timestamptz(3) // set while the flagged issue is Sev-1
+  complianceAssessorId   String?
+  complianceAssessor     User?     @relation("IssueComplianceAssessor", fields: [complianceAssessorId], references: [id])
+  complianceVisibleFrom  DateTime? @db.Timestamptz(3) // rule 4 for a flag below Sev-1 out of Compliance hours
+  complianceClosedAt     DateTime? @db.Timestamptz(3) // "Neither"
+
+  // Resolution and closure
+  resolvedAt             DateTime? @db.Timestamptz(3)
+  closedAt               DateTime? @db.Timestamptz(3)
+  closedById             String?
+  closedBy               User?     @relation("IssueClosedBy", fields: [closedById], references: [id])
+  closedAutomatically    Boolean   @default(false) // R2
+  waitingOnCustomerSince DateTime? @db.Timestamptz(3) // R2 "Remind customer" count
+  remindedAt             DateTime? @db.Timestamptz(3) // R2
+
+  groupReportId    String?
+  groupReport      IssueGroupReport? @relation(fields: [groupReportId], references: [id])
+  relatedToIssueId String? // R2, "Related to ISS-1031" (M22 AC16)
+  relatedToIssue   Issue?            @relation("IssueRelatedTo", fields: [relatedToIssueId], references: [id])
+  relatedFrom      Issue[]           @relation("IssueRelatedTo")
+
+  version   Int      @default(0)
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  resolutions     IssueResolution[]
+  contributors    IssueContributor[]
+  notes           IssueNote[]
+  communications  IssueCommunication[]
+  assessments     ComplianceAssessment[]
+  childLinks      IssueLink[]            @relation("IssueLinkParent")
+  parentLinks     IssueLink[]            @relation("IssueLinkChild")
+  rootCauseTask   RootCauseReportTask?
+  timeCorrections IssueTimeCorrection[]
+  historyEvents   HistoryEvent[]
+
+  @@index([entityId, status])
+  @@index([entityId, scheme, country, status])
+  @@index([ownerId, status])
+  @@index([reporterId])
+  @@index([complianceAssessorId])
+  @@index([status, clocksStartAt])
+  @@index([handoverAt])
+}
+
+model IssueResolution {
+  id                  String    @id @default(cuid())
+  issueId             String
+  issue               Issue     @relation(fields: [issueId], references: [id])
+  rootCause           String    @db.VarChar(2000)
+  solution            String    @db.VarChar(2000)
+  resolvedAt          DateTime  @db.Timestamptz(3)
+  resolvedById        String
+  resolvedBy          User      @relation("IssueResolutionBy", fields: [resolvedById], references: [id])
+  cascadedFromIssueId String? // set on linked issues resolved by the partner issue (M23 AC11)
+  supersededAt        DateTime? @db.Timestamptz(3) // back to In progress before close (M21 AC5)
+  supersededReason    String?   @db.VarChar(500)
+
+  @@index([issueId, resolvedAt(sort: Desc)])
+}
+
+model IssueGroupReport {
+  id          String   @id @default(cuid())
+  groupId     String
+  group       Group    @relation(fields: [groupId], references: [id])
+  createdById String
+  createdBy   User     @relation("IssueGroupReportBy", fields: [createdById], references: [id])
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  issues      Issue[] // shown as "Related issues" on each Issue page (M17 AC4)
+}
+
+model IssueLink {
+  id           String        @id @default(cuid())
+  parentId     String // the partner issue
+  parent       Issue         @relation("IssueLinkParent", fields: [parentId], references: [id])
+  childId      String // the customer issue
+  child        Issue         @relation("IssueLinkChild", fields: [childId], references: [id])
+  kind         IssueLinkKind
+  createdById  String // actor; the audit entry names the user
+  createdAt    DateTime      @default(now()) @db.Timestamptz(3)
+  unlinkedAt   DateTime?     @db.Timestamptz(3) // M23 AC14
+  unlinkedById String?
+  unlinkReason String?       @db.VarChar(500)
+
+  @@index([parentId])
+  @@index([childId])
+}
+
+model IssueContributor {
+  id             String    @id @default(cuid())
+  issueId        String
+  issue          Issue     @relation(fields: [issueId], references: [id])
+  userId         String
+  user           User      @relation("IssueContributorUser", fields: [userId], references: [id])
+  isDefault      Boolean   @default(false) // added by routing rule 5
+  addedForReport Boolean   @default(false) // the entity's Compliance person, added when the root cause report task was created (M27 AC4)
+  addedAt        DateTime  @default(now()) @db.Timestamptz(3)
+  removedAt      DateTime? @db.Timestamptz(3) // removal keeps the row; the audit entry names the actor
+
+  @@index([userId, removedAt])
+  @@index([issueId])
+}
+
+model IssueTimeCorrection {
+  id            String   @id @default(cuid())
+  issueId       String
+  issue         Issue    @relation(fields: [issueId], references: [id])
+  field         String   @db.VarChar(40) // "EVENT_AT" | "AWARE_AT" | "AWARENESS_SOURCE"
+  oldValue      String?  @db.VarChar(80) // ISO instant for the two times, enum name for the source; null = Unknown
+  newValue      String?  @db.VarChar(80)
+  reason        String   @db.VarChar(500)
+  correctedById String
+  correctedBy   User     @relation("IssueTimeCorrectedBy", fields: [correctedById], references: [id])
+  correctedAt   DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([issueId, correctedAt(sort: Desc)])
+}
+
+model IssueNote {
+  id         String        @id @default(cuid())
+  issueId    String
+  issue      Issue         @relation(fields: [issueId], references: [id])
+  kind       IssueNoteKind @default(NOTE)
+  body       String        @db.VarChar(5000)
+  details    Json? // ADDED_REPORT: { description, awareAt, reportedBy, impact, possibleBreach, suggestsSeverity }
+  authorId   String? // null for SYSTEM
+  author     User?         @relation("IssueNoteAuthor", fields: [authorId], references: [id])
+  authorName String        @db.VarChar(120) // "Customer Hub" for SYSTEM
+  authorTeam Team?
+  createdAt  DateTime      @default(now()) @db.Timestamptz(3)
+
+  @@index([issueId, createdAt(sort: Desc)])
+  @@index([authorId, kind])
+}
+
+model IssueCommunication {
+  id             String                @id @default(cuid())
+  issueId        String
+  issue          Issue                 @relation(fields: [issueId], references: [id])
+  type           CommunicationType
+  occurredAt     DateTime              @db.Timestamptz(3) // the "Time" field; not in the future, not before awareAt
+  channel        CommunicationChannel? // null for SYSTEM
+  contactId      String?
+  contact        Contact?              @relation("IssueCommunicationContact", fields: [contactId], references: [id])
+  personName     String?               @db.VarChar(120) // contact name snapshot or free text
+  message        String                @db.VarChar(5000)
+  recordedById   String? // null for SYSTEM
+  recordedBy     User?                 @relation("IssueCommunicationRecordedBy", fields: [recordedById], references: [id])
+  recordedByName String                @db.VarChar(120)
+  systemKey      String?               @unique @db.VarChar(120) // idempotency key of on-read system writes, e.g. "handover:<issueId>"
+  createdAt      DateTime              @default(now()) @db.Timestamptz(3)
+
+  @@index([issueId, occurredAt(sort: Desc)])
+}
+
+model ComplianceAssessment {
+  id               String            @id @default(cuid())
+  issueId          String
+  issue            Issue             @relation(fields: [issueId], references: [id])
+  outcome          AssessmentOutcome
+  rationale        String            @db.VarChar(1000)
+  assessedById     String
+  assessedBy       User              @relation("ComplianceAssessmentBy", fields: [assessedById], references: [id])
+  assessedAt       DateTime          @db.Timestamptz(3)
+  // Facts for the customer's regulator (R2, M25 AC9); target read once from the card
+  factsTargetHours Int?
+  factsDueAt       DateTime?         @db.Timestamptz(3)
+  factsStoppedAt   DateTime?         @db.Timestamptz(3)
+  // Data breach notification (R2, M25 AC10)
+  breachRuleLabel  String?           @db.VarChar(200)
+  breachDueAt      DateTime?         @db.Timestamptz(3)
+  breachStoppedAt  DateTime?         @db.Timestamptz(3)
+
+  @@index([issueId, assessedAt(sort: Desc)])
+}
+
+model RootCauseReportTask {
+  id                   String                @id @default(cuid())
+  issueId              String                @unique
+  issue                Issue                 @relation(fields: [issueId], references: [id])
+  createdAt            DateTime              @default(now()) @db.Timestamptz(3)
+  reportDays           Int? // card value read once at creation
+  dueDate              DateTime?             @db.Date // the calendar date of dueAt, for display and audit
+  dueAt                DateTime?             @db.Timestamptz(3) // resolution time + reportDays x 24 h, read once at creation
+  sentAt               DateTime?             @db.Timestamptz(3)
+  sentToContactId      String?
+  sentToContact        Contact?              @relation("RootCauseReportContact", fields: [sentToContactId], references: [id])
+  sentToName           String?               @db.VarChar(120)
+  channel              CommunicationChannel?
+  reportUrl            String?               @db.VarChar(2048)
+  summary              String?               @db.VarChar(2000)
+  sentById             String?
+  sentBy               User?                 @relation("RootCauseReportSentBy", fields: [sentById], references: [id])
+  // Compliance approves the report before it is sent; any Compliance-team user can (same permission as an assessment)
+  approvedAt           DateTime?             @db.Timestamptz(3)
+  approvedById         String?
+  approvedBy           User?                 @relation("RootCauseReportApprovedBy", fields: [approvedById], references: [id])
+  approvalNote         String?               @db.VarChar(2000)
+  // The owner writes the report and shares a draft; Compliance approves it or requests changes; then the owner sends it.
+  draftLink            String?               @db.VarChar(2048)
+  draftSummary         String?               @db.VarChar(2000)
+  draftSharedAt        DateTime?             @db.Timestamptz(3)
+  draftSharedById      String?
+  draftSharedBy        User?                 @relation("RootCauseReportDraftBy", fields: [draftSharedById], references: [id])
+  // Set when Compliance asks for changes (the draft is cleared, the previous one stays in History); cleared when a new draft is shared.
+  changesRequestedAt   DateTime?             @db.Timestamptz(3)
+  changesRequestedById String?
+  changesRequestedBy   User?                 @relation("RootCauseReportChangesBy", fields: [changesRequestedById], references: [id])
+  changesRequestReason String?               @db.VarChar(2000)
+}
+
+model IssueTeamMember {
+  id           String  @id @default(cuid())
+  entityId     String
+  entity       Entity  @relation(fields: [entityId], references: [id])
+  team         Team // SALES, OPS, NETWORK, FINANCE or COMPLIANCE; the customer owner is Entity.ownerId
+  userId       String
+  user         User    @relation("IssueTeamMemberUser", fields: [userId], references: [id])
+  backupUserId String? // R2, M18 AC12
+  backupUser   User?   @relation("IssueTeamMemberBackup", fields: [backupUserId], references: [id])
+
+  @@unique([entityId, team])
+  @@index([userId])
+}
+
+model OnCallShift {
+  id       String   @id @default(cuid())
+  team     Team // OPS, NETWORK or COMPLIANCE
+  userId   String
+  user     User     @relation("OnCallShiftUser", fields: [userId], references: [id])
+  startsAt DateTime @db.Timestamptz(3)
+  endsAt   DateTime @db.Timestamptz(3) // exclusive
+
+  @@index([team, startsAt, endsAt])
+}
+
+model TeamBusinessHours {
+  team      Team    @id
+  timeZone  String? @db.VarChar(64) // IANA; null = each user's own time zone (Sales, CS)
+  startTime String  @db.Char(5) // "09:00", inclusive
+  endTime   String  @db.Char(5) // "18:00", exclusive
+  weekdays  Int[] // ISO weekday 1 = Monday ... 7 = Sunday; seed [1, 2, 3, 4, 5]
+}
+
+// ───────────── Demo mode ─────────────
+
+model DemoMeta {
+  id          Int @id @default(1) // single row
+  seedVersion Int @default(0) // incremented by Reset demo data; compared with the ch_seed cookie (7.2.3)
+}
