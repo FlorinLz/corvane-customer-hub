@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { FieldError } from "@/components/ui/field-error";
+import { WhyThis } from "@/components/onboarding/WhyThis";
 
 export interface LinkedIssueRow {
   linkId: string;
@@ -52,9 +53,11 @@ export function LinkedIssuesPanel({ isOwner, rows, notifiedCount }: { isOwner: b
   }
 
   return (
-    <div className="flex flex-col gap-2 rounded-md border border-border p-4">
+    <div data-onboarding="linked-issues" className="flex flex-col gap-2 rounded-md border border-border p-4">
+      {/* The note's "?" sits inside the heading: tests find this panel as the heading's parent, so no wrapper around it. */}
       <h3 className="text-subsection">
         Linked issues ({rows.length}) {rows.length > 0 && <span className="text-meta text-text-secondary">· Customers notified {notifiedCount} of {rows.length}</span>}
+        <WhyThis note="linked-issues" className="ml-1 align-middle" />
       </h3>
       {rows.length === 0 ? (
         <p className="text-meta text-text-secondary">No linked issues yet</p>

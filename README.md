@@ -1,5 +1,52 @@
 # Customer Hub
 
+## Start here
+
+**Corvane** is a fictional company. Before a payment, it checks that the payee name matches the account, between banks (Verification of Payee in the EU, Confirmation of Payee in the UK).
+**Customer Hub** is Corvane's internal tool for customer and partner records and for incidents.
+When a check breaks, four teams must act fast and one person must speak to the customer. Customer Hub gives each person their next action and a deadline.
+
+**Live demo:** https://corvane-customer-hub.vercel.app (fictional data; it restores itself after 20 minutes without changes). A welcome card and a scenario panel guide the first visit. Best on a laptop.
+
+### Two scenarios
+
+1. **The night Sev-1, the morning after (2 min).** A bank's name checks failed overnight. As Emma Wilson, follow ISS-1042: her next action, the action plan, who told the customer at night, why the regulator deadline matters.
+2. **A partner bank goes down (3 min).** Lloyds degrades. As Lukas Brenner report it, create one linked issue per affected customer, notify Revolut as Adrian Koh, then resolve once for all.
+
+### Five principles
+
+1. Anyone can report an issue.
+2. Information is easy to find and use.
+3. One owner, one voice to the customer.
+4. Everyone sees their next action.
+5. A visible deadline on every step.
+
+### Architecture
+
+Next.js 16 (App Router) and TypeScript, Prisma 7, Postgres on Neon, hosted on Vercel. Three things exist only for a public demo:
+
+- **Demo clock.** Each visitor starts at the same demo moment and their clock runs from their arrival, so the seeded deadlines always make sense.
+- **Snapshot restore.** `data/demo-snapshot.js` holds every row after the seed; restoring it is one transaction under an advisory lock.
+- **Idle auto-restore.** After 20 minutes without a change, the next page load restores the data first. A daily cron at 03:00 UTC is the backstop.
+
+### Top five decisions
+
+Read in [DECISIONS.md](DECISIONS.md):
+
+1. [Issue model, routing and clocks](DECISIONS.md#milestone-6a-issue-model-routing-and-clocks-r1): one owner by rule, a communicator, every deadline counted from when Corvane became aware.
+2. [Report, Issue page and communication](DECISIONS.md#milestone-6b-report-issue-page-and-communication-r1): the severity is proposed by the server, the report takes seconds.
+3. [Partner issue and Compliance](DECISIONS.md#milestone-6c-partner-issue-compliance-and-issues-worklist-r1): one partner issue fans out to a linked issue per customer and resolves them together.
+4. [Issue page and Home table](DECISIONS.md#issue-page-v5-and-home-issues-table-pr-issue-page-v5-and-home-issues-table): Your next action and an action plan in process order.
+5. [Portfolio runtime](DECISIONS.md#portfolio-runtime-pr-portfolio-runtime): per-visitor clock, safe fast restore, no public reset.
+
+### How it was built
+
+A product manager (Florin Lazar) directed Claude Code from a written brief ([16_claude_code_brief.md](16_claude_code_brief.md)), milestone by milestone, and made the product decisions recorded in DECISIONS.md. The code is covered by about 530 unit tests and about 215 end-to-end tests that run against a local Postgres in Docker, never the hosted database.
+
+This repository starts with one commit because it was moved here from a private working repository.
+
+---
+
 An internal portal for Corvane: one record per customer and partner
 institution, shared across Sales, Ops, Customer Success, Network,
 Compliance and Finance. See `16_claude_code_brief.md` for the full

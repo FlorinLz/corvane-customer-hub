@@ -37,6 +37,12 @@ function UserLabel({ user }: { user: DemoUser }) {
 export function ViewAsSwitcher({ id, currentEmail }: { id?: string; currentEmail: string }) {
   const router = useRouter();
   const [email, setEmail] = React.useState(currentEmail);
+  // The guided scenarios (src/components/onboarding) switch the person from outside this select: follow the session when it changes.
+  const [seenEmail, setSeenEmail] = React.useState(currentEmail);
+  if (seenEmail !== currentEmail) {
+    setSeenEmail(currentEmail);
+    setEmail(currentEmail);
+  }
   const [pending, startTransition] = React.useTransition();
   const currentUser = DEMO_USERS.find((u) => u.email === email) ?? DEMO_USERS[0];
 

@@ -90,3 +90,17 @@ a {
     font-weight: 600;
   }
 }
+
+/* The scenario panel (src/components/onboarding) takes 360 px on the right; the page narrows by that much instead of sitting behind it. */
+html[data-onboarding-panel="open"] body {
+  padding-right: 360px;
+}
+@media (max-width: 899px) {
+  html[data-onboarding-panel="open"] body {
+    padding-right: 0;
+  }
+}
+/* Toasts sit left of the panel while it is open. */
+html[data-onboarding-panel="open"] [data-sonner-toaster][data-x-position="right"] {
+  right: 376px;
+}

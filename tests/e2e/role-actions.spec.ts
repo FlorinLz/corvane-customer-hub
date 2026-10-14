@@ -238,7 +238,7 @@ test.describe("Issue page v5, linked issue", () => {
     await expect(mine).toContainText("Required by the customer contract: notify the customer within 2 h");
     await expect(mine.getByTestId("plan-time-notify").locator("span").first()).toHaveText(TIME_LEFT);
     await expect(mine.getByTestId("plan-time-notify")).toContainText(/by (\d\d:\d\d|\w{3} \d\d \w{3}, \d\d:\d\d) MYT/);
-    await expect(plan.getByRole("button")).toHaveCount(0); // the table has no buttons: the one primary button is in Your next action
+    await expect(plan.locator("button:not([data-onboarding-why])")).toHaveCount(0); // the table has no buttons (the "Why this?" note aside): the one primary button is in Your next action
 
     const owner = plan.getByTestId("plan-row-acknowledge_on_parent");
     await expect(owner).toContainText("Lukas Brenner");

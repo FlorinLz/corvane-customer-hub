@@ -17,6 +17,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader } from "@/components/ui/dialog";
 import { FieldError } from "@/components/ui/field-error";
+import { WhyThis } from "@/components/onboarding/WhyThis";
 
 interface ProductLineRef {
   id: string;
@@ -99,9 +100,10 @@ export function AffectedCustomersPanel({
   }
 
   return (
-    <div className="flex flex-col gap-2 rounded-md border border-border p-4">
+    <div data-onboarding="affected-customers" className="flex flex-col gap-2 rounded-md border border-border p-4">
       <div className="flex items-center gap-2">
         <h3 className="text-subsection">Affected customers ({affected.length})</h3>
+        <WhyThis note="linked-issues" />
         <span className="flex-1" />
         {isOwner && toLink.length > 0 && (
           <Button variant="secondary" onClick={openDialog}>

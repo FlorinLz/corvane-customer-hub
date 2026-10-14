@@ -59,7 +59,7 @@ export function CompliancePanel({
   if (!flagged && assessments.length === 0 && regime !== "NONE" && !incompleteCard && !noCardLine) return null;
 
   return (
-    <section aria-label="Compliance" className="flex flex-col gap-2 rounded-md border border-border p-4">
+    <section aria-label="Compliance" data-onboarding="compliance-card" className="flex flex-col gap-2 rounded-md border border-border p-4">
       <h3 className="text-subsection">Compliance</h3>
 
       {flagged ? (

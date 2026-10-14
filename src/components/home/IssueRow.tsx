@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { TimeBlock } from "@/components/issues/TimeBlock";
 import type { RoleLine, RowView } from "@/server/queries/worklist/issues";
+import { WhyThis } from "@/components/onboarding/WhyThis";
 
 function severityVariant(s: string): "danger" | "due" | "neutral-outline" {
   if (s === "SEV1") return "danger";
@@ -43,7 +44,10 @@ export function IssueTableHeader() {
       )}
     >
       <span>Issue</span>
-      <span>Time</span>
+      <span className="inline-flex items-center gap-1" data-onboarding="time-column">
+        Time
+        <WhyThis note="time-column" />
+      </span>
       <span className="min-[1101px]:hidden">Description and customer</span>
       <span className="hidden min-[1101px]:inline">Description</span>
       <span className="hidden min-[1101px]:inline">Customer</span>
