@@ -182,7 +182,7 @@ export function CommunicationSection({
         )}
       </section>
 
-      <section id={MESSAGE_PANEL_ID} aria-label={`Message to the ${who}`} className="flex flex-col gap-3 rounded-md border border-border p-5">
+      <section id={MESSAGE_PANEL_ID} data-onboarding="message-panel" aria-label={`Message to the ${who}`} className="flex flex-col gap-3 rounded-md border border-border p-5">
         <div className="flex flex-col gap-1">
           <h3 className="text-subsection">Message to the {who}{nothingLeft ? "" : ` · ${MESSAGE_STAGE_LABELS[stage]}`}</h3>
           {!nothingLeft && <p className="text-meta text-text-secondary">Your edits are kept on this page until you record the message.</p>}

@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { ReportReviewActions } from "@/components/issues/ReportReviewActions";
 import { TimeBlock } from "@/components/issues/TimeBlock";
 import type { RoleAction } from "@/server/derived/role-actions";
+import { WhyThis } from "@/components/onboarding/WhyThis";
 
 /** What the "Record report sent" dialog needs (the root cause report task, M27). */
 export interface ReportDialogData {
@@ -167,9 +168,12 @@ export function ActionPlan({
   const now = useTickingNow(serverNow);
   const zoneLabel = formatInZone(now, zone, { timeOnly: true }).split(" ").pop();
   return (
-    <section aria-label="Action plan" className="overflow-hidden rounded-md border border-border bg-white">
+    <section aria-label="Action plan" data-onboarding="action-plan" className="overflow-hidden rounded-md border border-border bg-white">
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 px-5 py-3.5">
-        <h2 className="text-section">Action plan</h2>
+        <div className="flex items-center gap-1">
+          <h2 className="text-section">Action plan</h2>
+          <WhyThis note="action-plan" />
+        </div>
         <span className="text-meta text-text-secondary">
           Steps to close {displayId}, in process order · Times in your zone, {zoneLabel} · Now {formatInZone(now, zone, { timeOnly: true })}
         </span>

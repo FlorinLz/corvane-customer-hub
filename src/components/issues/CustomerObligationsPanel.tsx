@@ -14,7 +14,7 @@ export function CustomerObligationsPanel({
     : null;
 
   return (
-    <div className="flex flex-col gap-2 rounded-md border border-border p-4">
+    <div data-onboarding="customer-obligations" className="flex flex-col gap-2 rounded-md border border-border p-4">
       <h3 className="text-subsection">Customer obligations</h3>
       <dl className="grid grid-cols-[1fr_1fr] gap-1.5 text-body">
         <dt className="text-meta text-text-secondary">Incident notification time</dt>

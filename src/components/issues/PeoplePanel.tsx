@@ -2,6 +2,7 @@ import type { Team } from "@prisma/client";
 
 import { TEAM_LABELS } from "@/lib/labels";
 import { ContributorsPanel } from "@/components/issues/ContributorsPanel";
+import { WhyThis } from "@/components/onboarding/WhyThis";
 
 interface Contributor {
   userId: string;
@@ -36,8 +37,11 @@ export function PeoplePanel({
   contributors: Contributor[];
 }) {
   return (
-    <div className="flex flex-col gap-4 rounded-md border border-border p-4">
-      <h3 className="text-subsection">People</h3>
+    <div data-onboarding="people" className="flex flex-col gap-4 rounded-md border border-border p-4">
+      <div className="flex items-center gap-1">
+        <h3 className="text-subsection">People</h3>
+        <WhyThis note="owner-communicator" />
+      </div>
       <div className="flex flex-col gap-1">
         <span className="text-meta text-text-secondary">Owner</span>
         <span className="text-body">{ownerName ? `${ownerName} (${TEAM_LABELS[ownerTeam]})` : `Assigned at the start of ${TEAM_LABELS[ownerTeam]} business hours`}</span>

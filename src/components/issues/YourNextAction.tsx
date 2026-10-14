@@ -17,6 +17,7 @@ import { TimeBlock } from "@/components/issues/TimeBlock";
 import { useActionFocus } from "@/components/issues/ActionFocus";
 import type { ReportDialogData } from "@/components/issues/ActionPlan";
 import type { RoleAction } from "@/server/derived/role-actions";
+import { WhyThis } from "@/components/onboarding/WhyThis";
 
 /**
  * "Your next action": the viewer's most urgent open step, its time block and the ONE primary button for that step. With
@@ -109,10 +110,14 @@ export function YourNextAction({
   return (
     <section
       aria-label="Your next action"
+      data-onboarding="next-action"
       className="grid grid-cols-1 items-center gap-x-6 gap-y-3 rounded-md border border-l-4 border-border border-l-primary bg-tint-strong px-5 py-[18px] min-[1101px]:grid-cols-[minmax(0,1fr)_220px_auto]"
     >
       <div className="flex min-w-0 flex-col gap-1">
-        <h2 className="text-[12px] font-semibold uppercase tracking-[0.08em] text-text-secondary">Your next action</h2>
+        <div className="flex items-center gap-1">
+          <h2 className="text-[12px] font-semibold uppercase tracking-[0.08em] text-text-secondary">Your next action</h2>
+          <WhyThis note="next-action" />
+        </div>
         <p data-testid="next-action-title" className="text-[20px] font-semibold leading-7 text-primary">
           {mine ? mine.label : `Nothing for you to do on ${displayId}`}
         </p>

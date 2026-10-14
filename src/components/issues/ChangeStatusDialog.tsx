@@ -94,6 +94,7 @@ export function ChangeStatusDialog({
         else setError("Action not saved. Try again.");
         return;
       }
+      setCascadeConfirm(null); // the confirmation dialog is a sibling of the main one: closing the main one alone left it open after a cascade resolve
       setOpen(false);
       toast.success(isResolve ? "Issue resolved" : "Status changed");
       router.refresh();

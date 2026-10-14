@@ -67,7 +67,7 @@ function Entry({ entry, zone }: { entry: CommunicationLogEntry; zone: string }) 
 /** "Communication log. Messages exchanged with the customer" ("the partner" on a partner issue), one tinted row per entry (mail icon for messages, info icon for system entries). */
 export function CommunicationLogCard({ log, viewerZone, partner = false }: { log: CommunicationLogEntry[]; viewerZone: string; partner?: boolean }) {
   return (
-    <section aria-label="Communication log" className="flex flex-col gap-3 rounded-md border border-border bg-white p-5">
+    <section aria-label="Communication log" data-onboarding="communication-log" className="flex flex-col gap-3 rounded-md border border-border bg-white p-5">
       <h2 className="text-subsection">Communication log. Messages exchanged with the {partner ? "partner" : "customer"}</h2>
       {log.length === 0 ? (
         <p className="text-meta text-text-secondary">No communication recorded yet</p>

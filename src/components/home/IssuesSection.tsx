@@ -73,7 +73,7 @@ export function IssuesSection({ viewerId, canSeeTeamScope }: { viewerId: string;
 
   return (
     <>
-      <section id="worklist-issues" aria-label="Issues" className="flex flex-col rounded-md border border-border">
+      <section id="worklist-issues" data-onboarding="home-issues" aria-label="Issues" className="flex flex-col rounded-md border border-border">
         <div className="flex items-center gap-2 p-4 pb-3">
           {/* The Issues chip above is always "Mine". On "My team" this heading says so, so a different number is never a contradiction. */}
           <h2 className="text-subsection">

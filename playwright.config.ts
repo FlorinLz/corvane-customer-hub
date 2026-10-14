@@ -1,6 +1,22 @@
 import { defineConfig, devices } from "@playwright/test";
 
+import { STORAGE_KEYS } from "./src/lib/onboarding/content";
 import { SERVER_ENV } from "./tests/e2e/fixtures/server-env";
+
+// The welcome card and the mobile notice show on a visitor's first load. Every project starts with both already dismissed, so they never sit
+// over a button another spec clicks; onboarding.spec.ts starts from an empty storage (test.use) to see them.
+const dismissed = (port: number) => ({
+  cookies: [],
+  origins: [
+    {
+      origin: `http://localhost:${port}`,
+      localStorage: [
+        { name: STORAGE_KEYS.welcomeDismissed, value: "1" },
+        { name: STORAGE_KEYS.mobileDismissed, value: "1" },
+      ],
+    },
+  ],
+});
 
 // demo-clock-writes bug fix: a deliberate gap between the demo clock and the
 // real calendar date. Any business timestamp still written from the database's
@@ -49,7 +65,7 @@ export default defineConfig({
     trace: "on-first-retry",
   },
   projects: [
-    { name: "chromium", use: { ...devices["Desktop Chrome"] }, testIgnore: [/(scenario5-issue-flow-short|seed-worklists-screenshots)\.spec\.ts$/, /(demo-clock-zones|visitor-clock)\.spec\.ts$/, /demo-clock-skew\.spec\.ts$/, /(role-actions(-screenshots)?|action-plan-order-screenshots|assess-after-resolve|root-cause-report(-screenshots)?|issue-v5-screenshots|issue-times(-screenshots)?|issue-sections(-screenshots)?|report-from-home(-screenshots)?|ux-polish(-screenshots)?|small-fixes-v7)\.spec\.ts$/] },
+    { name: "chromium", use: { ...devices["Desktop Chrome"], storageState: dismissed(3000) }, testIgnore: [/onboarding(-screenshots)?\.spec\.ts$/, /(scenario5-issue-flow-short|seed-worklists-screenshots)\.spec\.ts$/, /(demo-clock-zones|visitor-clock)\.spec\.ts$/, /demo-clock-skew\.spec\.ts$/, /(role-actions(-screenshots)?|action-plan-order-screenshots|assess-after-resolve|root-cause-report(-screenshots)?|issue-v5-screenshots|issue-times(-screenshots)?|issue-sections(-screenshots)?|report-from-home(-screenshots)?|ux-polish(-screenshots)?|small-fixes-v7)\.spec\.ts$/] },
     // Brief 7.3.2 E2E-5 setup: its own project and webServer, since it
     // needs a different DEMO_CLOCK_START (Monday 05 Oct, the E2E-5
     // reference day) from every other spec's Friday 02 Oct clock. A
@@ -68,7 +84,7 @@ export default defineConfig({
     // took longer than the global 5s default to resolve against this dev
     // server, leaving the submit button genuinely still pending (not
     // stuck or wrong) when the assertion's own timeout ran out.
-    { name: "issues", use: { ...devices["Desktop Chrome"], baseURL: "http://localhost:3101", timezoneId: "Europe/Berlin" }, testMatch: /(scenario5-issue-flow-short|seed-worklists-screenshots)\.spec\.ts$/, expect: { timeout: 30_000 } }, // a dev server compiles each route on its first hit: on a loaded machine a first write can outlast 15 s
+    { name: "issues", use: { ...devices["Desktop Chrome"], baseURL: "http://localhost:3101", timezoneId: "Europe/Berlin", storageState: dismissed(3101) }, testMatch: /(scenario5-issue-flow-short|seed-worklists-screenshots)\.spec\.ts$/, expect: { timeout: 30_000 } }, // a dev server compiles each route on its first hit: on a loaded machine a first write can outlast 15 s
     // Milestone 8 live fix: the one spec here deliberately runs against a
     // *production* build (`next build && next start`, not `next dev`) with
     // the browser's own system zone pinned to Europe/Bucharest -- the
@@ -77,18 +93,18 @@ export default defineConfig({
     // browser's zone instead of the viewer's own would fail this project
     // even though every other project's `timezoneId: "Europe/Berlin"`
     // workaround (see its own comment above) would hide it by accident.
-    { name: "demo-clock-zones", use: { ...devices["Desktop Chrome"], baseURL: "http://localhost:3102", timezoneId: "Europe/Bucharest" }, testMatch: /(demo-clock-zones|visitor-clock)\.spec\.ts$/ },
+    { name: "demo-clock-zones", use: { ...devices["Desktop Chrome"], baseURL: "http://localhost:3102", timezoneId: "Europe/Bucharest", storageState: dismissed(3102) }, testMatch: /(demo-clock-zones|visitor-clock)\.spec\.ts$/ },
     // demo-clock-writes bug fix: another dedicated production build (same
     // reasoning as demo-clock-zones above -- this bug is in server-side
     // write code, not client bundle inlining, but the user's own test
     // instructions asked for a production build specifically, matching
     // how the real deployment actually runs), with its own clock a fixed weekday
     // anchor days behind "now" rather than demo-clock-zones' own fixed value.
-    { name: "demo-clock-skew", use: { ...devices["Desktop Chrome"], baseURL: "http://localhost:3103", timezoneId: "Europe/Berlin" }, testMatch: /demo-clock-skew\.spec\.ts$/ },
+    { name: "demo-clock-skew", use: { ...devices["Desktop Chrome"], baseURL: "http://localhost:3103", timezoneId: "Europe/Berlin", storageState: dismissed(3103) }, testMatch: /demo-clock-skew\.spec\.ts$/ },
     // Role actions PR: a production build too, clocked to the demo time (Mon 05 Oct 2026,
     // 10:48 CEST). The browser's own zone is pinned to Europe/Bucharest, which is none of the viewers'
     // zones (MYT, SGT), so a time formatted in the browser's zone instead of the viewer's would fail.
-    { name: "role-actions", use: { ...devices["Desktop Chrome"], baseURL: "http://localhost:3104", timezoneId: "Europe/Bucharest" }, testMatch: /(role-actions(-screenshots)?|action-plan-order-screenshots|assess-after-resolve|root-cause-report(-screenshots)?|issue-v5-screenshots|issue-times(-screenshots)?|issue-sections(-screenshots)?|report-from-home(-screenshots)?|ux-polish(-screenshots)?|small-fixes-v7)\.spec\.ts$/, expect: { timeout: 15_000 } },
+    { name: "role-actions", use: { ...devices["Desktop Chrome"], baseURL: "http://localhost:3104", timezoneId: "Europe/Bucharest", storageState: dismissed(3104) }, testMatch: /(onboarding(-screenshots)?|role-actions(-screenshots)?|action-plan-order-screenshots|assess-after-resolve|root-cause-report(-screenshots)?|issue-v5-screenshots|issue-times(-screenshots)?|issue-sections(-screenshots)?|report-from-home(-screenshots)?|ux-polish(-screenshots)?|small-fixes-v7)\.spec\.ts$/, expect: { timeout: 15_000 } },
   ],
   webServer: [
     {

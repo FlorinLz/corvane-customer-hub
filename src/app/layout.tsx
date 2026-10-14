@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
 
+import { MobileNotice } from "@/components/onboarding/MobileNotice";
+import { OnboardingHost } from "@/components/onboarding/OnboardingHost";
 import { DemoStrip } from "@/components/shell/DemoStrip";
 import { PreparingDemo } from "@/components/shell/PreparingDemo";
 import { TopBar } from "@/components/shell/TopBar";
@@ -64,11 +66,13 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     <html lang="en-GB" className={`${dmSans.variable} ${dmMono.variable}`}>
       <body className="flex min-h-full flex-col bg-background text-text" suppressHydrationWarning>
         <script dangerouslySetInnerHTML={{ __html: `window.__chClockOffsetMs=${serverNowMs}-Date.now()` }} />
+        {demoMode && <MobileNotice />}
         {demoMode && <DemoStrip currentEmail={user.email} serverNow={now()} />}
         <TopBar user={user} />
         <main className="mx-auto w-full max-w-[1440px] flex-1 px-6 py-6">
           {children}
         </main>
+        {demoMode && <OnboardingHost currentEmail={user.email} />}
         <Toaster />
       </body>
     </html>
