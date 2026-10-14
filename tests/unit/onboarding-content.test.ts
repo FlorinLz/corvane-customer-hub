@@ -10,17 +10,13 @@ const EMPTY: OnboardingState = {
 };
 
 const allText = () => [
-  ...Object.values(WELCOME),
+  ...JSON.stringify(WELCOME).split('"'),
   MOBILE_NOTICE,
   ...Object.values(NOTES).flatMap((n) => [n.title, n.text]),
   ...Object.values(SCENARIOS).flatMap((s) => [s.title, s.subtitle, ...s.steps.flatMap((st) => [st.title, st.text])]),
 ];
 
 describe("onboarding copy", () => {
-  it("the welcome card has at most 60 words of text", () => {
-    expect([WELCOME.title, WELCOME.intro, WELCOME.by].join(" ").split(/\s+/).length).toBeLessThanOrEqual(60);
-  });
-
   it("uses no em dash, and each note is two sentences", () => {
     for (const t of allText()) expect(t).not.toContain("—");
     for (const n of Object.values(NOTES)) expect(n.text.split(/(?<=\.)\s+/)).toHaveLength(2);

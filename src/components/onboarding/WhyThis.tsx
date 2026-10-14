@@ -8,7 +8,7 @@ import { NOTES, type NoteKey } from "@/lib/onboarding/content";
 import { cn } from "@/lib/utils";
 
 /**
- * "Why this?": a small "?" next to an element, opening a popover with two sentences (the decision, then the principle it serves).
+ * "Why this?": a small "?" next to an element, opening a popover with a plain note.
  * Demo only: it renders nothing unless DEMO_MODE is on (NEXT_PUBLIC_DEMO_MODE, set by next.config.ts).
  * The popover is portalled and positioned from the button, so a table or card that clips its content never clips the note. Escape and a
  * click elsewhere close it.
@@ -85,7 +85,7 @@ export function WhyThis({ note, className }: { note: NoteKey; className?: string
             style={{ top: pos.top, left: pos.left }}
             className="fixed z-[60] w-[300px] rounded-md border border-border bg-white p-3 text-body text-text shadow-overlay"
           >
-            <p className="text-label text-primary">Why this? {copy.title}</p>
+            <p className="text-label text-primary">Why this?</p>
             <p className="mt-1">{copy.text}</p>
           </div>,
           document.body,
