@@ -7,6 +7,7 @@ import { CommunicationChannel, CommunicationType } from "@prisma/client";
 
 import { apiRequest } from "@/lib/api-client";
 import { now } from "@/lib/dates";
+import { defaultIncidentContactId } from "@/lib/incident-contact";
 import { splitInZone, tzAbbreviation, zonedDateTimeToUtc } from "@/lib/time-zones";
 import { COMMUNICATION_CHANNEL_LABELS } from "@/lib/labels";
 import { Button } from "@/components/ui/button";
@@ -53,7 +54,7 @@ export function RecordCommunicationDialog({
   const [date, setDate] = React.useState(() => splitInZone(now(), viewerZone).date);
   const [time, setTime] = React.useState(() => splitInZone(now(), viewerZone).time);
   const [channel, setChannel] = React.useState<CommunicationChannel | "">("");
-  const [contactId, setContactId] = React.useState("");
+  const [contactId, setContactId] = React.useState(() => defaultIncidentContactId(contacts));
   const [personName, setPersonName] = React.useState("");
   const [message, setMessage] = React.useState("");
   const [error, setError] = React.useState<string | null>(null);
@@ -65,7 +66,7 @@ export function RecordCommunicationDialog({
     setDate(t.date);
     setTime(t.time);
     setChannel("");
-    setContactId("");
+    setContactId(defaultIncidentContactId(contacts));
     setPersonName("");
     setMessage("");
     setError(null);

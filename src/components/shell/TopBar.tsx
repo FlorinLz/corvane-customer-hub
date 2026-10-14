@@ -8,7 +8,7 @@ import { UserMenu } from "@/components/shell/UserMenu";
 import type { DemoUser } from "@/lib/demo-users";
 
 // Brief 5.2 layout region 2; Admin menu per 4.1.6, added in milestone 4.
-export function TopBar({ user, demoMode }: { user: DemoUser; demoMode: boolean }) {
+export function TopBar({ user }: { user: DemoUser }) {
   return (
     <div className="flex h-14 items-center gap-4 border-b border-border bg-surface px-4 lg:gap-6 lg:px-6">
       <Link href="/" aria-label="Corvane Customer Hub, go to Home">
@@ -20,7 +20,7 @@ export function TopBar({ user, demoMode }: { user: DemoUser; demoMode: boolean }
           capped-width search bar, so the user menu stays flush right
           instead of trailing right after the search bar. */}
       <span className="flex-1" aria-hidden="true" />
-      <AdminMenu isAdmin={user.isAdmin} isCompliance={user.team === "COMPLIANCE"} demoMode={demoMode} />
+      <AdminMenu isAdmin={user.isAdmin} isCompliance={user.team === "COMPLIANCE"} />
       <UserMenu user={user} />
     </div>
   );

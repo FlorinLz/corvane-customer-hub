@@ -8,6 +8,7 @@ import { CommunicationChannel } from "@prisma/client";
 import { dialogNow, openingTime } from "@/lib/dialog-time";
 import { apiRequest } from "@/lib/api-client";
 import { now } from "@/lib/dates";
+import { defaultIncidentContactId } from "@/lib/incident-contact";
 import { tzAbbreviation, zonedDateTimeToUtc } from "@/lib/time-zones";
 import { COMMUNICATION_CHANNEL_LABELS } from "@/lib/labels";
 import { Button } from "@/components/ui/button";
@@ -30,7 +31,7 @@ interface Contact {
 export function CloseDialog({ issueId, version, contacts, viewerZone, resolvedAt, triggerVariant = "primary", triggerLabel = "Confirm resolution with the customer", partner = false }: { issueId: string; version: number; contacts: Contact[]; viewerZone: string; resolvedAt: Date | null; triggerVariant?: "primary" | "secondary"; triggerLabel?: string; /** A partner issue: the confirmation comes from the partner. */ partner?: boolean }) {
   const router = useRouter();
   const [open, setOpen] = React.useState(false);
-  const [contactId, setContactId] = React.useState("");
+  const [contactId, setContactId] = React.useState(() => defaultIncidentContactId(contacts));
   const [personName, setPersonName] = React.useState("");
   const [channel, setChannel] = React.useState<CommunicationChannel | "">("");
   const [date, setDate] = React.useState(() => openingTime(resolvedAt, viewerZone).date);
@@ -40,7 +41,7 @@ export function CloseDialog({ issueId, version, contacts, viewerZone, resolvedAt
   const [pending, setPending] = React.useState(false);
 
   function reset() {
-    setContactId("");
+    setContactId(defaultIncidentContactId(contacts));
     setPersonName("");
     setChannel("");
     const t = openingTime(resolvedAt, viewerZone); // read when the dialog opens, never a value kept from page load

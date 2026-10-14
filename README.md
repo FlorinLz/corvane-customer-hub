@@ -46,8 +46,10 @@ tests, Playwright for end-to-end tests.
    full demo dataset (brief section 7.1) via `prisma/seed/seed.ts`. Prisma
    shows an interactive safety prompt before `migrate reset` when it's run
    by an AI coding agent; that's expected the first time and is not a
-   bug. "Reset demo data" in the app (Admin menu, added in milestone 4)
-   calls the same seed function without the migration step.
+   bug. The running app restores its data by itself (after 20 minutes
+   without changes, and once a day; see "Restoring the demo data"), using
+   the same seed function without the migration step. There is no reset
+   button.
 
    For a deterministic demo-day seed (matching the brief's worked
    examples) and offline GLEIF lookups:
@@ -97,15 +99,17 @@ typecheck, a data reset under the frozen demo clock
 unit suite against that deterministic seed, the e2e suite, then a final
 reset back to a real-time seed so the database is left in its normal
 state for interactive browsing afterward. It uses `npm run
-demo:reset-data` (the TRUNCATE + seed path, same as the app's own "Reset
-demo data" admin action) for both resets, not `npm run db:reset` — the
+demo:reset-data` (the TRUNCATE + seed path, same as the app's own
+restore) for both resets, not `npm run db:reset` — the
 latter calls `prisma migrate reset`, which carries its own AI-agent
 consent gate (see DECISIONS.md) and would hang when run unattended, e.g.
 by an AI coding agent or in CI.
 
 `npm run test:e2e` itself runs serially (`playwright.config.ts`:
 `fullyParallel: false`, `workers: 1`) because some specs call
-`POST /api/demo/reset` mid-run, which is destructive to every other
+reset the data mid-run (`tests/e2e/fixtures/reset.ts` runs `npm run
+demo:reset-data` with the clock of the server under test; the app itself
+has no public reset), which is destructive to every other
 spec's seed-data assumptions if it runs concurrently with them.
 
 ## Environment variables
@@ -114,8 +118,9 @@ spec's seed-data assumptions if it runs concurrently with them.
 |---|---|
 | `DATABASE_URL` | Runtime Postgres connection (`hub_app` role). On Vercel with Neon, use the pooled URL (the `-pooler` host). Each instance opens one connection at most (`src/server/pool-config.ts`) |
 | `DATABASE_DIRECT_URL` | Optional. A direct (non-pooler) URL for the same database and role. The Production build's migration check (`scripts/vercel-build.sh`) uses it when set, because Prisma Migrate cannot run through a transaction-mode pooler; unset, the check uses `DATABASE_URL` |
-| `DATABASE_ADMIN_URL` | Migrations, seed and "Reset demo data" (`hub_owner` role). Pooled or direct |
-| `DEMO_MODE` | `true` shows the demo strip, "View as" and "Reset demo data", and signs in automatically. `false` is the production-shaped mode (no auto sign-in; company SSO is phase 2) |
+| `DATABASE_ADMIN_URL` | Migrations, seed and the demo's own restore (idle rule and daily cron; `hub_owner` role). Pooled or direct. Without it the app never restores by itself |
+| `CRON_SECRET` | The daily restore's password: Vercel Cron sends it as `Authorization: Bearer <value>` to `/api/cron/demo-restore`, which answers 401 to anything else (and always when this is unset). 16+ random characters |
+| `DEMO_MODE` | `true` shows the demo strip and "View as", signs in automatically and turns on the idle restore. `false` is the production-shaped mode (no auto sign-in; company SSO is phase 2) |
 | `DEMO_DEFAULT_USER_EMAIL` | Session user when no `ch_user` cookie is set (`DEMO_MODE` only) |
 | `DEMO_CLOCK_START` | ISO instant where `today()` (`src/lib/dates.ts`) starts counting from and runs forward in real time. With `DEMO_MODE=true` and no `DEMO_CLOCK_ANCHOR`, each visitor's clock starts there at their own first request (the `ch_arrival` cookie, 24 h) — see "Per-visitor clock" below. Ignored in production (`NODE_ENV=production`) *unless* `DEMO_MODE=true` (milestone 8 decision, see DECISIONS.md) — this lets the production demo deployment pin the issue-flow demo day, while a hypothetical real (non-demo) production deployment always stays on the real clock |
 | `DEMO_CLOCK_ANCHOR` | Optional. A real ISO instant recorded once, just before the interview. Pins the `DEMO_CLOCK_START` offset to a fixed constant shared by every serverless instance, instead of each instance's own cold-start time — see "Demo runbook" below. Ignored when `DEMO_CLOCK_START` is unset. When set it overrides the per-visitor clock for everybody |
@@ -144,7 +149,7 @@ Vercel build.
 For the interview demo deployment specifically, also set
 `DEMO_CLOCK_START=2026-10-05T08:05:00Z` on **Production only** (not
 Preview, so future PR previews keep showing live dates) — see "Demo
-runbook" below for why and how this interacts with "Reset demo data".
+runbook" below for why and how this interacts with the restore.
 
 ## Project status
 
@@ -154,7 +159,7 @@ Building in two releases (brief 1.7). Currently in Release 1 (milestones
 - **Milestone 1**: scaffold, brand tokens, app shell.
 - **Milestone 2**: full Prisma schema and migrations, the full seed
   dataset (brief 7.1), the GLEIF client with cache fallback, demo mode
-  ("View as", Reset demo data).
+  ("View as").
 - **Milestone 3**: read paths — search, the entity record's eight tabs,
   the group record.
 - **Milestone 4**: permissions and audit (the `can()`/`mutate()` policy
@@ -195,12 +200,12 @@ below, so if anything here and that file ever disagree, trust the test.
   `DEMO_CLOCK_START=2026-10-05T08:05:00Z` set directly in the Vercel
   project's Production environment variables): resetting there — either
   `npm run demo:reset-data` run against that same database, or the
-  Admin menu's "Reset demo data" button on the live URL itself — always
+  app's own idle and daily restore — always
   seeds from the pinned demo day, Monday 05 Oct 2026, 10:05 CEST,
   regardless of the real calendar date on the day of the interview
   (`src/lib/dates.ts`: `DEMO_CLOCK_START` is honoured in production
-  when `DEMO_MODE=true`). Both reset paths call the same `seed()`
-  function, so they can never drift apart.
+  when `DEMO_MODE=true`). The restore paths all rest on the same `seed()`
+  function (the snapshot is generated from it), so they can never drift apart.
 - **Cross-instance drift**: `DEMO_CLOCK_START` alone anchors each
   serverless instance's offset to *that instance's own* cold-start
   time, so two instances starting minutes apart (or a cold start mid-
@@ -214,7 +219,14 @@ A visitor's first request sets the `ch_arrival` cookie (the real arrival instant
 
 ### Restoring the demo data
 
-"Reset demo data" restores `data/demo-snapshot.js`, a generated snapshot of the seeded data, in one transaction (about 0.5 s on local Docker, against about 5 s for running the seed). A Postgres advisory lock keeps two restores from running at once, and a failure rolls back to the previous data. Whenever the seed, the schema or the GLEIF cache changes, `tests/unit/demo-snapshot.test.ts` fails until you run `npm run demo:snapshot` (local Docker database only) and commit the result. When the snapshot does not apply (a different clock day, `GLEIF_SEED_SOURCE` not `cache`), the restore runs the seed instead, in the same kind of transaction.
+The app restores `data/demo-snapshot.js`, a generated snapshot of the seeded data, in one transaction (about 0.5 s on local Docker, against about 5 s for running the seed). A Postgres advisory lock keeps two restores from running at once, and a failure rolls back to the previous data. Whenever the seed, the schema, the migrations or the GLEIF cache change, `tests/unit/demo-snapshot.test.ts` fails until you run `npm run demo:snapshot` (local Docker database only) and commit the result. When the snapshot does not apply (a different clock day, `GLEIF_SEED_SOURCE` not `cache`), the restore runs the seed instead, in the same kind of transaction.
+
+There is no public reset. The data restores itself in two ways:
+
+- **Idle rule.** Every successful write request (any visitor) stamps `DemoMeta.lastWriteAt`. On a page request, if data changed since the last restore and nobody wrote for 20 minutes (the database's clock), the page shows "Preparing a fresh demo..." while the restore runs, then renders. A request that finds a restore running waits for it instead of starting another. A restore sets `DemoMeta.lastRestoreAt` and clears `lastWriteAt`; a visitor whose `ch_arrival` is older than `lastRestoreAt` gets a new one (through the same screen), so their clock and the data start together. Code: `src/server/demo-idle.ts`, `src/server/demo-gate.ts`, `POST /api/demo/prepare`. It does nothing unless the rule holds, so it is no way to reset on demand. It needs `DATABASE_ADMIN_URL`.
+- **Daily backstop.** `vercel.json` has a Vercel Cron at 03:00 UTC that calls `GET /api/cron/demo-restore`, which runs the same restore unconditionally and checks `Authorization: Bearer $CRON_SECRET` (401 otherwise).
+
+`/api/demo/reset` answers 404. To reset by hand: `npm run demo:reset-data`.
 
 ### Before the interview
 
@@ -225,7 +237,8 @@ A visitor's first request sets the `ch_arrival` cookie (the real arrival instant
    wait.
 2. Run the brief's own pre-demo checklist (7.2.5) in full: `npm run
    gleif:check`, `npm run gleif:snapshot` if GLEIF is reachable, the
-   Corvane-exclusion check, Reset demo data on the live URL (Admin menu —
+   Corvane-exclusion check, a fresh restore (wait 20 minutes after your last
+   change, or run `npm run demo:reset-data` against the production database;
    this is what actually makes the app show Monday 05 Oct 2026, 10:05
    CEST), walk the Home oracle (7.1.15), the two search counts, the
    paste-ready snippets file, "Reset filters" on Lloyds/MPS History,
@@ -238,7 +251,7 @@ A visitor's first request sets the `ch_arrival` cookie (the real arrival instant
 
 ### Issue-flow walkthrough (scenario 5) — which "View as" user per step
 
-All steps assume a fresh "Reset demo data" first. Switch users with the
+All steps assume freshly restored data (`npm run demo:reset-data`, or an idle restore). Switch users with the
 demo strip's "View as" selector; each switch reloads on Home, "Mine"
 scope.
 
@@ -265,7 +278,7 @@ scope.
   idempotent-safe to retry (version-checked), so a stale page is the
   most likely cause, not data corruption.
 - **Something looks structurally wrong (wrong owner, missing section,
-  stale counts)**: run "Reset demo data" from the Admin menu and restart
+  stale counts)**: stop making changes for 20 minutes (the demo restores itself on the next page load) or run `npm run demo:reset-data`, and restart
   the walkthrough from scenario 1 — every scenario is designed to run
   from a clean reset in any order, so this always recovers cleanly.
 - **A GLEIF-dependent screen (the wizard's LEI lookup, "Refresh from

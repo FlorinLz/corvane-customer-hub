@@ -1350,6 +1350,8 @@ model TeamBusinessHours {
 // ───────────── Demo mode ─────────────
 
 model DemoMeta {
-  id          Int @id @default(1) // single row
-  seedVersion Int @default(0) // incremented by Reset demo data; compared with the ch_seed cookie (7.2.3)
+  id            Int       @id @default(1) // single row
+  seedVersion   Int       @default(0) // incremented by every restore (7.2.3)
+  lastWriteAt   DateTime? @db.Timestamptz(3) // the last data write by any visitor since the last restore; null = nothing changed since then
+  lastRestoreAt DateTime? @db.Timestamptz(3) // when the data was last restored; a visitor whose ch_arrival is older gets a new one
 }

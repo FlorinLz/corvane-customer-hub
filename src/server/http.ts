@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import "@/server/request-clock"; // registers the per-visitor clock for now() on the server
+import { recordDataWrite } from "@/server/demo-idle";
 
 import {
   ConflictError,
@@ -15,13 +16,21 @@ import {
 
 // Brief 3.1.1 "http.ts: handle(name, fn): auth, error mapping, JSON
 // responses" and 3.1.3's per-step failure response shapes.
+//
+// Idle restore: a POST, PUT, PATCH or DELETE that succeeds counts as a data write (DemoMeta.lastWriteAt, src/server/demo-idle.ts). A
+// handler that only reads, or only sets a cookie, passes { writes: false }.
 export function handle<Args extends unknown[]>(
   name: string,
   fn: (...args: Args) => Promise<unknown>,
+  options: { writes?: boolean } = {},
 ) {
   return async (...args: Args): Promise<NextResponse> => {
     try {
       const data = await fn(...args);
+      const request = args[0];
+      if (options.writes !== false && process.env.DEMO_MODE === "true" && request instanceof Request && !["GET", "HEAD", "OPTIONS"].includes(request.method)) {
+        await recordDataWrite();
+      }
       // A handler that already built its NextResponse (e.g. to set a
       // cookie) is returned as-is; anything else is wrapped.
       if (data instanceof NextResponse) return data;

@@ -28,4 +28,4 @@ export const POST = handle("demo.view-as", async (req: Request) => {
     path: "/",
   });
   return response;
-});
+}, { writes: false });

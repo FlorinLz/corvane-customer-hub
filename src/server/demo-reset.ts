@@ -40,6 +40,8 @@ export async function resetDemoData(db: PrismaClient): Promise<number> {
       const tables = await dataTables(tx);
       await tx.$executeRawUnsafe(`TRUNCATE TABLE ${tables.map((t) => `"${t}"`).join(", ")} RESTART IDENTITY CASCADE`);
       await seed(tx as unknown as PrismaClient); // seed() itself bumps DemoMeta.seedVersion (prisma/seed/seed.ts, Phase 16)
+      // The data is fresh: nothing written since, and visitors who arrived before this moment get a new clock (src/server/demo-idle.ts).
+      await tx.$executeRawUnsafe(`UPDATE "DemoMeta" SET "lastWriteAt" = NULL, "lastRestoreAt" = clock_timestamp() WHERE "id" = 1`);
       return (await tx.demoMeta.findUniqueOrThrow({ where: { id: 1 } })).seedVersion;
     },
     // The seed is thousands of statements; on a database a network hop away it can take minutes. 280 s sits inside maxDuration (300 s).
@@ -68,7 +70,7 @@ export async function restoreFromSnapshot(adminUrl: string | undefined, snapshot
       if (!lock.rows[0].locked) throw new ConflictError(BUSY);
       await client.query(buildRestoreSql(snapshot));
       const meta = await client.query(
-        `INSERT INTO "DemoMeta" ("id", "seedVersion") VALUES (1, 1) ON CONFLICT ("id") DO UPDATE SET "seedVersion" = "DemoMeta"."seedVersion" + 1 RETURNING "seedVersion"`,
+        `INSERT INTO "DemoMeta" ("id", "seedVersion", "lastRestoreAt") VALUES (1, 1, clock_timestamp()) ON CONFLICT ("id") DO UPDATE SET "seedVersion" = "DemoMeta"."seedVersion" + 1, "lastWriteAt" = NULL, "lastRestoreAt" = clock_timestamp() RETURNING "seedVersion"`,
       );
       await client.query("COMMIT");
       return meta.rows[0].seedVersion as number;

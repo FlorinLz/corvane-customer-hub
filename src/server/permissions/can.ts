@@ -20,7 +20,6 @@ export type Action =
   | "admin.deleted.read"
   | "entity.softDelete"
   | "entity.reactivate"
-  | "admin.demoReset"
   | "entity.roles.edit"
   | "entity.contract.attach"
   | "entity.group.edit"
@@ -70,7 +69,6 @@ const ACTION_AREA: Partial<Record<Action, DataArea>> = {
   "admin.deleted.read": "admin.usersAndDeleted",
   "entity.softDelete": "admin.softDelete",
   "entity.reactivate": "admin.softDelete",
-  "admin.demoReset": "admin.demoReset",
   "entity.roles.edit": "entity.rolesAndLifecycle",
   "entity.contract.attach": "customer.contract",
   "entity.group.edit": "entity.group",

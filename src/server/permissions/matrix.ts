@@ -43,7 +43,6 @@ export type DataArea =
   | "audit.read"
   | "admin.softDelete"
   | "admin.usersAndDeleted"
-  | "admin.demoReset"
   | "admin.permissions"
   | "issue.report"
   | "issue.owner"
@@ -188,10 +187,6 @@ export const PERMISSION_MATRIX: readonly AreaPolicy[] = [
   },
   {
     area: "admin.usersAndDeleted", group: "Admin", rowLabel: "Users & roles (incl. Change history), Deleted records",
-    cells: { ...NONE6, OPS: "admin" },
-  },
-  {
-    area: "admin.demoReset", group: "Admin", rowLabel: "Reset demo data",
     cells: { ...NONE6, OPS: "admin" },
   },
   {

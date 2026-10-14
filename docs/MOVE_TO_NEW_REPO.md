@@ -68,7 +68,8 @@ Import the new repository as a new Vercel project (framework: Next.js). The buil
 | `DEMO_DEFAULT_USER_EMAIL` | demo | Session user with no cookie. If unset or inactive, the first active Admin is used |
 | `DEMO_CLOCK_START` | demo | Pins the demo day. Production only, so previews keep live dates |
 | `DEMO_CLOCK_ANCHOR` | optional | Fixes the clock offset across serverless instances. Ignored without `DEMO_CLOCK_START` |
-| `DATABASE_ADMIN_URL` | only for Admin > Reset demo data and the idle restore | Owner role, pooled or direct. The build ignores it. Leave it out if you do not need the reset button in production |
+| `DATABASE_ADMIN_URL` | yes for the demo | Owner role, pooled or direct. The idle restore and the daily cron use it. The build ignores it. Without it the app never restores by itself |
+| `CRON_SECRET` | yes for the demo | The password of the daily restore (`vercel.json` cron, 03:00 UTC, `GET /api/cron/demo-restore`): Vercel sends it as `Authorization: Bearer <value>`. Unset, the route answers 401 and the daily restore does nothing |
 | `APPROVED_DOC_HOSTS` | optional | Comma-separated hosts allowed in document links |
 | `APP_TIMEZONE` | optional | Default `Europe/Bucharest` |
 | `DUPLICATE_NAME_THRESHOLD` | optional | Default `0.85` |

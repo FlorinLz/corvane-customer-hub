@@ -18,4 +18,4 @@ export const POST = handle("entity.issuesSimilar", async (req: Request, { params
   await getCurrentUser(); // every active user of the 6 teams; no team-specific gate
   const input = parseBody(schema, await readJson(req));
   return loadSimilarIssues(id, input.scheme, input.country);
-});
+}, { writes: false });

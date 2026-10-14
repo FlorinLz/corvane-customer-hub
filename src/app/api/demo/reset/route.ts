@@ -1,26 +1,11 @@
-import { createAdminDb } from "@/server/db-admin";
-import { handle } from "@/server/http";
-import { NotFoundError } from "@/server/errors";
-import { getCurrentUser } from "@/server/session";
-import { assertCan } from "@/server/permissions/guard";
-import { restoreDemoData } from "@/server/demo-reset";
-import { atFreshClock } from "@/server/request-clock";
+import { NextResponse } from "next/server";
 
-// The reset truncates and reseeds in one request. 300 s is the Vercel Functions default on every plan with Fluid Compute; it is
-// explicit here so a two-minute reset on a database a network hop away can never be cut short (DECISIONS.md, "Reset duration").
-export const maxDuration = 300;
+// There is no public reset. The demo restores itself after 20 minutes without changes (src/server/demo-idle.ts) and once a day
+// (/api/cron/demo-restore). `npm run demo:reset-data` is the manual way. Every method answers 404.
+const notFound = () => NextResponse.json({ error: "not_found" }, { status: 404 });
 
-// Brief 7.2.3. Admin only, DEMO_MODE only. Truncates every data table,
-// reseeds with today from src/lib/dates.ts, increments
-// DemoMeta.seedVersion. The client reloads to / and shows the toast
-// "Demo data reset" (wired up with the Admin menu, milestone 4).
-export const POST = handle("demo.reset", async () => {
-  if (process.env.DEMO_MODE !== "true") throw new NotFoundError();
-
-  const user = await getCurrentUser();
-  assertCan(user, "admin.demoReset");
-
-  // Dated from the default demo clock, not from the clock of whoever pressed the button.
-  const { seedVersion } = await atFreshClock(() => restoreDemoData(createAdminDb));
-  return { seedVersion };
-});
+export const GET = notFound;
+export const POST = notFound;
+export const PUT = notFound;
+export const PATCH = notFound;
+export const DELETE = notFound;

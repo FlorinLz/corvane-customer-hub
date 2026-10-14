@@ -1,9 +1,10 @@
 import "dotenv/config";
 
-import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 
 import { signUserCookie, SESSION_COOKIE } from "@/server/session";
 import { db } from "@/server/db";
+import { resetDemoData } from "./fixtures/reset";
 
 /**
  * Brief 7.3.2 E2E-5 `scenario5-issue-flow.spec.ts`, R1 short spec
@@ -25,13 +26,6 @@ import { db } from "@/server/db";
 const FROZEN_TIME = new Date("2026-10-05T08:05:00Z");
 
 test.describe.configure({ mode: "serial" });
-
-async function resetDemoData(request: APIRequestContext) {
-  const adrian = await db.user.findUniqueOrThrow({ where: { email: "adrian.koh@corvane.example" } });
-  const cookie = `${SESSION_COOKIE}=${signUserCookie(adrian.id)}`;
-  const res = await request.post("/api/demo/reset", { headers: { cookie } });
-  expect(res.ok()).toBe(true);
-}
 
 /** Brief 7.3.2: "Helper viewAs(team) uses the switcher in the demo strip." */
 async function viewAs(page: Page, optionLabel: string) {

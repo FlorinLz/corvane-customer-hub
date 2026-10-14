@@ -1,4 +1,8 @@
+import "dotenv/config";
+
 import { expect, test } from "@playwright/test";
+
+import { db } from "@/server/db";
 
 /**
  * Per-visitor demo clock (portfolio runtime). Runs under the `demo-clock-zones` project: a production build whose
@@ -31,6 +35,8 @@ test("a new visitor starts at DEMO_CLOCK_START and gets a 24 hour arrival cookie
 });
 
 test("a visitor who arrived two hours ago is two hours into the demo; a newcomer is back at the start", async ({ browser }) => {
+  // The data was last restored three hours ago; a visitor who arrived before the last restore would be given a new clock (idle-restore.spec.ts).
+  await db.$executeRaw`UPDATE "DemoMeta" SET "lastRestoreAt" = clock_timestamp() - interval '3 hours' WHERE "id" = 1`;
   const returning = await browser.newContext();
   await returning.addCookies([{ name: "ch_arrival", value: String(Date.now() - 2 * HOUR_MS), url: "http://localhost:3102" }]);
   const returningPage = await returning.newPage();

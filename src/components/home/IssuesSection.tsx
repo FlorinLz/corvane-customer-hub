@@ -75,7 +75,10 @@ export function IssuesSection({ viewerId, canSeeTeamScope }: { viewerId: string;
     <>
       <section id="worklist-issues" aria-label="Issues" className="flex flex-col rounded-md border border-border">
         <div className="flex items-center gap-2 p-4 pb-3">
-          <h2 className="text-subsection">Issues {data ? `(${data.main.length})` : ""}</h2>
+          {/* The Issues chip above is always "Mine". On "My team" this heading says so, so a different number is never a contradiction. */}
+          <h2 className="text-subsection">
+            {scope === "team" ? "Team issues" : "Issues"} {data ? `(${data.main.length})` : ""}
+          </h2>
           <span className="text-meta text-text-secondary" data-testid="issues-note">
             {scope === "team" ? "Most urgent first, then by severity" : "Your actions first, then by deadline, then by severity"}
           </span>

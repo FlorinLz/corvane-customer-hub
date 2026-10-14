@@ -47,8 +47,8 @@ describe("PERMISSION_MATRIX (brief 4.1.2 / M15 AC3)", () => {
     }
   });
 
-  it("admin-only areas (Users & roles, soft delete, demo reset) are 'admin' for Ops and 'none' for every other team", () => {
-    for (const area of ["admin.usersAndDeleted", "admin.softDelete", "admin.demoReset"] as const) {
+  it("admin-only areas (Users & roles, soft delete) are 'admin' for Ops and 'none' for every other team", () => {
+    for (const area of ["admin.usersAndDeleted", "admin.softDelete"] as const) {
       const policy = MATRIX_BY_AREA[area];
       expect(policy.cells.OPS).toBe("admin");
       for (const team of ["SALES", "CS", "NETWORK", "COMPLIANCE", "FINANCE"] as const) {
@@ -118,13 +118,6 @@ describe("can() (brief 4.1.3)", () => {
   it("entity.reactivate is allowed on a soft-deleted entity for the admin (the one exception to the deleted-entity write block)", () => {
     const deleted = { entity: { deletedAt: new Date() } };
     expect(can(user(Team.OPS, true), "entity.reactivate", deleted)).toEqual({ ok: true });
-  });
-
-  it("admin.demoReset: only the admin", () => {
-    for (const team of ALL_TEAMS) {
-      expect(can(user(team, false), "admin.demoReset").ok).toBe(false);
-    }
-    expect(can(user(Team.OPS, true), "admin.demoReset")).toEqual({ ok: true });
   });
 
   it("a denied team write returns a ForbiddenError carrying the matrix's owner team", () => {

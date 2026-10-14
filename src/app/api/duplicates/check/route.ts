@@ -14,4 +14,4 @@ export const POST = handle("duplicates.check", async (req: Request) => {
   assertCan(user, "customer.create");
   const body = (await readJson(req)) as DuplicateCheckInput;
   return checkDuplicates(body);
-});
+}, { writes: false });

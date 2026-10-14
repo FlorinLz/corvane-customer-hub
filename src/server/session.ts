@@ -42,7 +42,7 @@ function verify(value: string): string | null {
  * (decision B8, Adrian Koh); if that user does not exist (for example right
  * after a rebrand, while the database still holds the old users) or is
  * inactive, it falls back to the first active Admin so the app still loads and
- * Reset demo data stays reachable. With DEMO_MODE=false and no cookie, the
+ * the app stays reachable. With DEMO_MODE=false and no cookie, the
  * request fails (company SSO is out of scope, resolution 60).
  */
 export async function getCurrentUser(): Promise<User> {

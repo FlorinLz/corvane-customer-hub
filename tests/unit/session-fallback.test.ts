@@ -11,7 +11,7 @@ import { getCurrentUser } from "@/server/session";
 
 /**
  * Default user fallback (DEMO_MODE, no cookie): the user named by DEMO_DEFAULT_USER_EMAIL, else the first active Admin, so the app
- * still loads (and Reset demo data stays reachable) while the database holds users the env var does not name. Real seed data; the
+ * still loads (and the app stays reachable) while the database holds users the env var does not name. Real seed data; the
  * tests that flip `active` restore it in `finally`.
  */
 

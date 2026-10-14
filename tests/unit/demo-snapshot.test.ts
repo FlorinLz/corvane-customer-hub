@@ -1,13 +1,10 @@
 import "dotenv/config";
 
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
-
-import { PrismaPg } from "@prisma/adapter-pg";
-import { PrismaClient } from "@prisma/client";
+import type { PrismaClient } from "@prisma/client";
 import { Client } from "pg";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
+import { createScratchDb } from "./helpers/scratch-db";
 import { snapshotInputHash } from "../../scripts/demo-snapshot-lib";
 import { buildRestoreSql, demoSnapshot, type DemoSnapshot } from "@/server/demo-snapshot";
 import { ConflictError } from "@/server/errors";
@@ -46,22 +43,11 @@ describe("buildRestoreSql", () => {
   });
 });
 
-// The database tests run in a throwaway database made from the baseline migration, so they never touch the shared dev database
+// The database tests run in a throwaway database made from the migrations, so they never touch the shared dev database
 // the other test files assert against.
-const adminUrl = process.env.DATABASE_ADMIN_URL ?? "";
-const scratchName = `customer_hub_snapshot_test_${process.pid}`;
-const scratchUrl = adminUrl.replace(/\/[^/?]+(\?|$)/, `/${scratchName}$1`);
 let scratch: PrismaClient;
-
-async function withMaintenance<T>(fn: (c: Client) => Promise<T>): Promise<T> {
-  const c = new Client({ connectionString: adminUrl });
-  await c.connect();
-  try {
-    return await fn(c);
-  } finally {
-    await c.end();
-  }
-}
+let scratchUrl: string;
+let dropScratch: () => Promise<void>;
 
 async function counts(db: PrismaClient): Promise<Record<string, number>> {
   const out: Record<string, number> = {};
@@ -71,17 +57,14 @@ async function counts(db: PrismaClient): Promise<Record<string, number>> {
 
 describe("restoring the snapshot", () => {
   beforeAll(async () => {
-    await withMaintenance((c) => c.query(`CREATE DATABASE "${scratchName}"`));
-    const c = new Client({ connectionString: scratchUrl });
-    await c.connect();
-    await c.query(readFileSync(resolve(__dirname, "../../prisma/migrations/20261010000000_baseline/migration.sql"), "utf-8"));
-    await c.end();
-    scratch = new PrismaClient({ adapter: new PrismaPg({ connectionString: scratchUrl, max: 1 }) });
+    const db = await createScratchDb("customer_hub_snapshot_test");
+    scratch = db.client;
+    scratchUrl = db.url;
+    dropScratch = db.drop;
   }, 60_000);
 
   afterAll(async () => {
-    await scratch?.$disconnect();
-    await withMaintenance((c) => c.query(`DROP DATABASE IF EXISTS "${scratchName}" WITH (FORCE)`));
+    await dropScratch?.();
   });
 
   it("covers every data table and gives the same row counts as the snapshot", async () => {
