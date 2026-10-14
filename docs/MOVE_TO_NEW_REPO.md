@@ -61,13 +61,14 @@ Import the new repository as a new Vercel project (framework: Next.js). The buil
 
 | Name | Needed | Note |
 |---|---|---|
-| `DATABASE_URL` | yes | Runtime connection, role `hub_app`. Production and Preview |
+| `DATABASE_URL` | yes | Runtime connection, role `hub_app`. Production and Preview. On Neon use the pooled URL (`-pooler` host); the app opens one connection per function instance |
+| `DATABASE_DIRECT_URL` | with a pooled `DATABASE_URL` | Direct (non-pooler) URL, same database and role. The Production build's migration check uses it. Unset, the check uses `DATABASE_URL` |
 | `SESSION_SECRET` | yes | 32+ random characters |
 | `DEMO_MODE` | yes for the demo | `true` shows the demo bar and "View as" |
 | `DEMO_DEFAULT_USER_EMAIL` | demo | Session user with no cookie. If unset or inactive, the first active Admin is used |
 | `DEMO_CLOCK_START` | demo | Pins the demo day. Production only, so previews keep live dates |
 | `DEMO_CLOCK_ANCHOR` | optional | Fixes the clock offset across serverless instances. Ignored without `DEMO_CLOCK_START` |
-| `DATABASE_ADMIN_URL` | only for Admin > Reset demo data | Owner role. The build ignores it. Leave it out if you do not need the reset button in production |
+| `DATABASE_ADMIN_URL` | only for Admin > Reset demo data and the idle restore | Owner role, pooled or direct. The build ignores it. Leave it out if you do not need the reset button in production |
 | `APPROVED_DOC_HOSTS` | optional | Comma-separated hosts allowed in document links |
 | `APP_TIMEZONE` | optional | Default `Europe/Bucharest` |
 | `DUPLICATE_NAME_THRESHOLD` | optional | Default `0.85` |
@@ -75,7 +76,7 @@ Import the new repository as a new Vercel project (framework: Next.js). The buil
 | `GLEIF_TIMEOUT_MS` | optional | Has a default |
 | `GLEIF_CACHE_PATH` | optional | Has a default |
 | `GLEIF_FORCE_CACHE` | optional | `true` serves GLEIF lookups from the cache only |
-| `GLEIF_SEED_SOURCE` | seed only | Read when seeding, not at runtime |
+| `GLEIF_SEED_SOURCE` | `cache` on Vercel | Read when the data is restored. `cache` restores the generated snapshot and never calls the live GLEIF API |
 
 Set by Vercel itself, not by you: `VERCEL_ENV`, `NODE_ENV`, `CI`. Used only by local scripts and tests: `POSTGRES_HOST_PORT`, `NEXT_DIST_DIR`. `NEXT_PUBLIC_DEMO_MODE`, `NEXT_PUBLIC_DEMO_CLOCK_START` and `NEXT_PUBLIC_DEMO_CLOCK_ANCHOR` are derived from the `DEMO_*` variables by `next.config.ts`; do not set them.
 

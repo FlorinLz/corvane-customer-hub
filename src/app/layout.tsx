@@ -1,23 +1,32 @@
 import type { Metadata } from "next";
-import { DM_Sans, DM_Mono } from "next/font/google";
+import localFont from "next/font/local";
 
 import { DemoStrip } from "@/components/shell/DemoStrip";
 import { TopBar } from "@/components/shell/TopBar";
 import { Toaster } from "@/components/ui/toaster";
 import { now } from "@/lib/dates";
 import { getCurrentUser } from "@/server/session";
+import "@/server/request-clock"; // registers the per-visitor clock for now() on the server
 
 import "./globals.css";
 
-const dmSans = DM_Sans({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
+// DM Sans and DM Mono, served from src/fonts (the latin subset, OFL licence next to them). They used to come from
+// next/font/google, which downloads them at build time: one Vercel build failed when that request failed.
+const dmSans = localFont({
+  src: [
+    { path: "../fonts/dm-sans-latin-400-normal.woff2", weight: "400", style: "normal" },
+    { path: "../fonts/dm-sans-latin-500-normal.woff2", weight: "500", style: "normal" },
+    { path: "../fonts/dm-sans-latin-600-normal.woff2", weight: "600", style: "normal" },
+    { path: "../fonts/dm-sans-latin-700-normal.woff2", weight: "700", style: "normal" },
+  ],
   variable: "--font-dm-sans",
 });
 
-const dmMono = DM_Mono({
-  subsets: ["latin"],
-  weight: ["400", "500"],
+const dmMono = localFont({
+  src: [
+    { path: "../fonts/dm-mono-latin-400-normal.woff2", weight: "400", style: "normal" },
+    { path: "../fonts/dm-mono-latin-500-normal.woff2", weight: "500", style: "normal" },
+  ],
   variable: "--font-dm-mono",
 });
 
@@ -32,10 +41,13 @@ export const metadata: Metadata = {
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const demoMode = process.env.DEMO_MODE === "true";
   const user = await getCurrentUser();
+  // The browser's now() = the server's demo now at this render + the browser's own time since this script ran (src/lib/dates.ts).
+  const serverNowMs = now().getTime();
 
   return (
     <html lang="en-GB" className={`${dmSans.variable} ${dmMono.variable}`}>
       <body className="flex min-h-full flex-col bg-background text-text" suppressHydrationWarning>
+        <script dangerouslySetInnerHTML={{ __html: `window.__chClockOffsetMs=${serverNowMs}-Date.now()` }} />
         {demoMode && <DemoStrip currentEmail={user.email} serverNow={now()} />}
         <TopBar user={user} demoMode={demoMode} />
         <main className="mx-auto w-full max-w-[1440px] flex-1 px-6 py-6">

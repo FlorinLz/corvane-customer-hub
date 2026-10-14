@@ -10,7 +10,7 @@
  * blanket removal of the NODE_ENV guard, so this stays inert on a hypothetical real
  * (non-demo) production deployment of this app.
  *
- * DEMO_CLOCK_ANCHOR (milestone 8): on a serverless platform, `clockOffsetMs` is
+ * DEMO_CLOCK_ANCHOR (milestone 8): on a serverless platform, the offset is
  * normally computed once per function instance, anchored to THAT instance's own
  * cold-start moment -- fine for one long-running local process, but on Vercel,
  * different instances cold-start at different real moments and so land on
@@ -61,20 +61,28 @@ interface ClockEnv {
  * work under either bundler -- next.config.ts derives them from the same,
  * unrenamed env vars, so no deployment config changes).
  */
-export function computeClockOffsetMs(env: ClockEnv, realNowMs: number): number {
+/** DEMO_CLOCK_START as epoch ms, or null when the demo clock is off (unset, malformed, or production without DEMO_MODE). */
+export function clockStartMs(env: ClockEnv): number | null {
   const demoMode = env.DEMO_MODE ?? env.NEXT_PUBLIC_DEMO_MODE;
   const isDemoMode = demoMode === "true";
-  if (env.NODE_ENV === "production" && !isDemoMode) return 0;
+  if (env.NODE_ENV === "production" && !isDemoMode) return null;
   const start = env.DEMO_CLOCK_START ?? env.NEXT_PUBLIC_DEMO_CLOCK_START;
-  if (!start) return 0;
+  if (!start) return null;
   const startMs = new Date(start).getTime();
-  if (Number.isNaN(startMs)) return 0;
+  return Number.isNaN(startMs) ? null : startMs;
+}
+
+export function computeClockOffsetMs(env: ClockEnv, realNowMs: number, arrivalMs?: number): number {
+  const startMs = clockStartMs(env);
+  if (startMs === null) return 0;
 
   const anchor = env.DEMO_CLOCK_ANCHOR ?? env.NEXT_PUBLIC_DEMO_CLOCK_ANCHOR;
   if (anchor) {
     const anchorMs = new Date(anchor).getTime();
     if (!Number.isNaN(anchorMs)) return startMs - anchorMs;
   }
+  // Per visitor (src/lib/visitor-clock.ts): the clock started at DEMO_CLOCK_START the moment this visitor first arrived.
+  if (arrivalMs !== undefined) return startMs - arrivalMs;
   return startMs - realNowMs;
 }
 
@@ -85,22 +93,70 @@ export function computeClockOffsetMs(env: ClockEnv, realNowMs: number): number {
 // whole object handed to a function can't be substituted this way and
 // silently evaluates to `undefined` properties in the browser (where
 // `process.env` is a bundler-provided shim, not Node's real one).
-const clockOffsetMs = computeClockOffsetMs(
-  {
-    NODE_ENV: process.env.NODE_ENV,
-    DEMO_MODE: process.env.DEMO_MODE,
-    DEMO_CLOCK_START: process.env.DEMO_CLOCK_START,
-    DEMO_CLOCK_ANCHOR: process.env.DEMO_CLOCK_ANCHOR,
-    NEXT_PUBLIC_DEMO_MODE: process.env.NEXT_PUBLIC_DEMO_MODE,
-    NEXT_PUBLIC_DEMO_CLOCK_START: process.env.NEXT_PUBLIC_DEMO_CLOCK_START,
-    NEXT_PUBLIC_DEMO_CLOCK_ANCHOR: process.env.NEXT_PUBLIC_DEMO_CLOCK_ANCHOR,
-  },
-  Date.now(),
-);
+const CLOCK_ENV: ClockEnv = {
+  NODE_ENV: process.env.NODE_ENV,
+  DEMO_MODE: process.env.DEMO_MODE,
+  DEMO_CLOCK_START: process.env.DEMO_CLOCK_START,
+  DEMO_CLOCK_ANCHOR: process.env.DEMO_CLOCK_ANCHOR,
+  NEXT_PUBLIC_DEMO_MODE: process.env.NEXT_PUBLIC_DEMO_MODE,
+  NEXT_PUBLIC_DEMO_CLOCK_START: process.env.NEXT_PUBLIC_DEMO_CLOCK_START,
+  NEXT_PUBLIC_DEMO_CLOCK_ANCHOR: process.env.NEXT_PUBLIC_DEMO_CLOCK_ANCHOR,
+};
 
-/** The current instant, offset by DEMO_CLOCK_START outside production. */
+/** The pre-visitor behaviour: one offset per process (server) or per page load (browser), anchored to the moment this module loaded. Scripts and tests with no request use it. */
+const processOffsetMs = computeClockOffsetMs(CLOCK_ENV, Date.now());
+
+/**
+ * What the server module src/server/request-clock.ts puts on globalThis once it is loaded (any server bundle that renders or
+ * handles a request imports it). dates.ts is shared with the browser, so it cannot import that module, or Next's request
+ * storage, itself.
+ */
+export interface ServerClockHook {
+  /** An offset forced for the duration of a callback (restore/seed run at a fresh clock), or undefined. */
+  forced(): number | undefined;
+  /** The arrival instant (epoch ms) in the current request's visitor-clock cookie, or undefined. */
+  arrival(): number | undefined;
+}
+
+/**
+ * The browser learns the offset from the server: the root layout writes `window.__chClockOffsetMs`, the server's
+ * demo "now" minus the browser's own Date.now() at that moment. So the browser agrees with the server on the demo
+ * time whatever its own clock says (a laptop clock a few minutes off no longer makes a prefilled time "in the future").
+ */
+declare global {
+  interface Window {
+    __chClockOffsetMs?: number;
+  }
+}
+
+function currentOffsetMs(): number {
+  if (typeof window !== "undefined") return window.__chClockOffsetMs ?? processOffsetMs;
+  const hook = (globalThis as { __corvaneClock?: ServerClockHook }).__corvaneClock;
+  if (hook) {
+    const forced = hook.forced();
+    if (forced !== undefined) return forced;
+    // DEMO_CLOCK_ANCHOR is the override: it fixes the offset for every visitor (tests, and the owner before an interview).
+    if (!CLOCK_ENV.DEMO_CLOCK_ANCHOR) {
+      const arrival = hook.arrival();
+      if (arrival !== undefined) return computeClockOffsetMs(CLOCK_ENV, Date.now(), arrival);
+    }
+  }
+  return processOffsetMs;
+}
+
+/** The offset a restore uses: the clock as a visitor arriving right now would get it (DEMO_CLOCK_START now, or the anchored clock). */
+export function freshClockOffsetMs(): number {
+  return computeClockOffsetMs(CLOCK_ENV, Date.now());
+}
+
+/** The current instant, offset by DEMO_CLOCK_START outside production. On the server, per visitor. */
 export function now(): Date {
-  return new Date(Date.now() + clockOffsetMs);
+  return new Date(Date.now() + currentOffsetMs());
+}
+
+/** Whether each visitor gets their own clock: the demo clock is on and DEMO_CLOCK_ANCHOR is not overriding it. */
+export function visitorClockEnabled(): boolean {
+  return clockStartMs(CLOCK_ENV) !== null && !CLOCK_ENV.DEMO_CLOCK_ANCHOR;
 }
 
 function partsInTimeZone(date: Date, timeZone: string): LocalDate {

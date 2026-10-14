@@ -22,6 +22,8 @@
     "db:reset": "tsx scripts/db-reset.ts",
     "db:seed": "tsx prisma/seed/index.ts",
     "demo:reset-data": "tsx scripts/demo-reset-data.ts",
+    "demo:snapshot": "tsx scripts/write-demo-snapshot.ts",
+    "demo:restore-time": "tsx scripts/demo-restore-time.ts",
     "neon:rebuild-sql": "tsx scripts/write-neon-rebuild.ts",
     "gleif:snapshot": "tsx scripts/gleif-snapshot.ts",
     "gleif:check": "tsx scripts/gleif-check.ts",

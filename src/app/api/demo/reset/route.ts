@@ -3,7 +3,8 @@ import { handle } from "@/server/http";
 import { NotFoundError } from "@/server/errors";
 import { getCurrentUser } from "@/server/session";
 import { assertCan } from "@/server/permissions/guard";
-import { resetDemoData } from "@/server/demo-reset";
+import { restoreDemoData } from "@/server/demo-reset";
+import { atFreshClock } from "@/server/request-clock";
 
 // The reset truncates and reseeds in one request. 300 s is the Vercel Functions default on every plan with Fluid Compute; it is
 // explicit here so a two-minute reset on a database a network hop away can never be cut short (DECISIONS.md, "Reset duration").
@@ -19,12 +20,7 @@ export const POST = handle("demo.reset", async () => {
   const user = await getCurrentUser();
   assertCan(user, "admin.demoReset");
 
-  const db = createAdminDb();
-  try {
-    await resetDemoData(db);
-    const meta = await db.demoMeta.findUniqueOrThrow({ where: { id: 1 } });
-    return { seedVersion: meta.seedVersion };
-  } finally {
-    await db.$disconnect();
-  }
+  // Dated from the default demo clock, not from the clock of whoever pressed the button.
+  const { seedVersion } = await atFreshClock(() => restoreDemoData(createAdminDb));
+  return { seedVersion };
 });

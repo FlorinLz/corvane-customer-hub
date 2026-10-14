@@ -49,7 +49,7 @@ export default defineConfig({
     trace: "on-first-retry",
   },
   projects: [
-    { name: "chromium", use: { ...devices["Desktop Chrome"] }, testIgnore: [/(scenario5-issue-flow-short|seed-worklists-screenshots)\.spec\.ts$/, /demo-clock-zones\.spec\.ts$/, /demo-clock-skew\.spec\.ts$/, /(role-actions(-screenshots)?|action-plan-order-screenshots|assess-after-resolve|root-cause-report(-screenshots)?|issue-v5-screenshots|issue-times(-screenshots)?|issue-sections(-screenshots)?|report-from-home(-screenshots)?|ux-polish(-screenshots)?|small-fixes-v7)\.spec\.ts$/] },
+    { name: "chromium", use: { ...devices["Desktop Chrome"] }, testIgnore: [/(scenario5-issue-flow-short|seed-worklists-screenshots)\.spec\.ts$/, /(demo-clock-zones|visitor-clock)\.spec\.ts$/, /demo-clock-skew\.spec\.ts$/, /(role-actions(-screenshots)?|action-plan-order-screenshots|assess-after-resolve|root-cause-report(-screenshots)?|issue-v5-screenshots|issue-times(-screenshots)?|issue-sections(-screenshots)?|report-from-home(-screenshots)?|ux-polish(-screenshots)?|small-fixes-v7)\.spec\.ts$/] },
     // Brief 7.3.2 E2E-5 setup: its own project and webServer, since it
     // needs a different DEMO_CLOCK_START (Monday 05 Oct, the E2E-5
     // reference day) from every other spec's Friday 02 Oct clock. A
@@ -77,7 +77,7 @@ export default defineConfig({
     // browser's zone instead of the viewer's own would fail this project
     // even though every other project's `timezoneId: "Europe/Berlin"`
     // workaround (see its own comment above) would hide it by accident.
-    { name: "demo-clock-zones", use: { ...devices["Desktop Chrome"], baseURL: "http://localhost:3102", timezoneId: "Europe/Bucharest" }, testMatch: /demo-clock-zones\.spec\.ts$/ },
+    { name: "demo-clock-zones", use: { ...devices["Desktop Chrome"], baseURL: "http://localhost:3102", timezoneId: "Europe/Bucharest" }, testMatch: /(demo-clock-zones|visitor-clock)\.spec\.ts$/ },
     // demo-clock-writes bug fix: another dedicated production build (same
     // reasoning as demo-clock-zones above -- this bug is in server-side
     // write code, not client bundle inlining, but the user's own test

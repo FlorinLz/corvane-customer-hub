@@ -19,6 +19,13 @@ if [ "${VERCEL_ENV:-}" = "production" ]; then
   # prisma.config.ts reads DATABASE_ADMIN_URL first and falls back to DATABASE_URL. Admin credentials are not on
   # Vercel, but if one were ever added, the check must still use the runtime connection, never the owner role.
   unset DATABASE_ADMIN_URL
+  # The runtime DATABASE_URL may be a pooled (Neon "-pooler") URL. Prisma Migrate needs a direct connection (it takes an
+  # advisory lock a transaction-mode pooler cannot keep), so when DATABASE_DIRECT_URL is set the check uses it instead.
+  # Unset, the check uses DATABASE_URL, as before.
+  if [ -n "${DATABASE_DIRECT_URL:-}" ]; then
+    export DATABASE_URL="$DATABASE_DIRECT_URL"
+    echo "vercel-build: the migration check uses DATABASE_DIRECT_URL"
+  fi
   echo "vercel-build: checking that no migration is pending (prisma migrate status, read-only)"
   status_output="$(npx prisma migrate status 2>&1)"
   status_code=$?

@@ -112,15 +112,17 @@ spec's seed-data assumptions if it runs concurrently with them.
 
 | Variable | Purpose |
 |---|---|
-| `DATABASE_URL` | Runtime Postgres connection (`hub_app` role) |
-| `DATABASE_ADMIN_URL` | Migrations, seed and "Reset demo data" (`hub_owner` role) |
+| `DATABASE_URL` | Runtime Postgres connection (`hub_app` role). On Vercel with Neon, use the pooled URL (the `-pooler` host). Each instance opens one connection at most (`src/server/pool-config.ts`) |
+| `DATABASE_DIRECT_URL` | Optional. A direct (non-pooler) URL for the same database and role. The Production build's migration check (`scripts/vercel-build.sh`) uses it when set, because Prisma Migrate cannot run through a transaction-mode pooler; unset, the check uses `DATABASE_URL` |
+| `DATABASE_ADMIN_URL` | Migrations, seed and "Reset demo data" (`hub_owner` role). Pooled or direct |
 | `DEMO_MODE` | `true` shows the demo strip, "View as" and "Reset demo data", and signs in automatically. `false` is the production-shaped mode (no auto sign-in; company SSO is phase 2) |
 | `DEMO_DEFAULT_USER_EMAIL` | Session user when no `ch_user` cookie is set (`DEMO_MODE` only) |
-| `DEMO_CLOCK_START` | ISO instant where `today()` (`src/lib/dates.ts`) starts counting from and runs forward in real time. Ignored in production (`NODE_ENV=production`) *unless* `DEMO_MODE=true` (milestone 8 decision, see DECISIONS.md) — this lets the production demo deployment pin the issue-flow demo day, while a hypothetical real (non-demo) production deployment always stays on the real clock |
-| `DEMO_CLOCK_ANCHOR` | Optional. A real ISO instant recorded once, just before the interview. Pins the `DEMO_CLOCK_START` offset to a fixed constant shared by every serverless instance, instead of each instance's own cold-start time — see "Demo runbook" below. Ignored when `DEMO_CLOCK_START` is unset |
+| `DEMO_CLOCK_START` | ISO instant where `today()` (`src/lib/dates.ts`) starts counting from and runs forward in real time. With `DEMO_MODE=true` and no `DEMO_CLOCK_ANCHOR`, each visitor's clock starts there at their own first request (the `ch_arrival` cookie, 24 h) — see "Per-visitor clock" below. Ignored in production (`NODE_ENV=production`) *unless* `DEMO_MODE=true` (milestone 8 decision, see DECISIONS.md) — this lets the production demo deployment pin the issue-flow demo day, while a hypothetical real (non-demo) production deployment always stays on the real clock |
+| `DEMO_CLOCK_ANCHOR` | Optional. A real ISO instant recorded once, just before the interview. Pins the `DEMO_CLOCK_START` offset to a fixed constant shared by every serverless instance, instead of each instance's own cold-start time — see "Demo runbook" below. Ignored when `DEMO_CLOCK_START` is unset. When set it overrides the per-visitor clock for everybody |
 | `SESSION_SECRET` | HMAC key for the `ch_user` session cookie (added in milestone 2) |
 | `APP_TIMEZONE` | Definition of "today" and business days (default `Europe/Bucharest`) |
-| `GLEIF_BASE_URL`, `GLEIF_TIMEOUT_MS`, `GLEIF_CACHE_PATH`, `GLEIF_FORCE_CACHE`, `GLEIF_SEED_SOURCE` | GLEIF lookup client (added in milestone 2) |
+| `GLEIF_BASE_URL`, `GLEIF_TIMEOUT_MS`, `GLEIF_CACHE_PATH`, `GLEIF_FORCE_CACHE`, `GLEIF_SEED_SOURCE` | GLEIF lookup client (added in milestone 2). `data/gleif-cache.json` is imported by the code, so it is inside every serverless function; on Vercel set `GLEIF_SEED_SOURCE=cache` (the restore never calls the live API) |
+| `DB_POOL_MAX` | Local experiments only. Overrides the one-connection-per-instance pool size |
 | `APPROVED_DOC_HOSTS` | Comma-separated approved hosts for evidence and contract links |
 | `DUPLICATE_NAME_THRESHOLD` | Trigram similarity threshold for the duplicate-name check |
 
@@ -205,6 +207,14 @@ below, so if anything here and that file ever disagree, trust the test.
   demo) can briefly show different "now" values. `DEMO_CLOCK_ANCHOR`
   (optional) pins the offset to one fixed, shared timestamp instead —
   set it right before the interview, see the next section.
+
+### Per-visitor clock
+
+A visitor's first request sets the `ch_arrival` cookie (the real arrival instant, 24 h). Their demo "now" is `DEMO_CLOCK_START + (real now − arrival)`, so every new visitor starts at Mon 05 Oct 2026, 10:05 CEST, whenever they arrive, and the clock then runs in real time. The server reads the cookie per request (`src/proxy.ts` sets it, `src/server/request-clock.ts` lets the synchronous `now()` see it); the browser takes its offset from the server at each page load (`window.__chClockOffsetMs`, written by the root layout), so a browser clock that is a few minutes off still agrees with the server. `DEMO_CLOCK_ANCHOR` overrides all of this for everybody.
+
+### Restoring the demo data
+
+"Reset demo data" restores `data/demo-snapshot.js`, a generated snapshot of the seeded data, in one transaction (about 0.5 s on local Docker, against about 5 s for running the seed). A Postgres advisory lock keeps two restores from running at once, and a failure rolls back to the previous data. Whenever the seed, the schema or the GLEIF cache changes, `tests/unit/demo-snapshot.test.ts` fails until you run `npm run demo:snapshot` (local Docker database only) and commit the result. When the snapshot does not apply (a different clock day, `GLEIF_SEED_SOURCE` not `cache`), the restore runs the seed instead, in the same kind of transaction.
 
 ### Before the interview
 

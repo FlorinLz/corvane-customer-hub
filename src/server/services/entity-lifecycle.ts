@@ -48,7 +48,7 @@ export async function reactivateEntity(user: SessionUser, entityId: string) {
     if (!entity.deletedAt) throw new ConflictError("not_deleted");
 
     if (entity.lei) {
-      const blockedMessage = await findLeiConflictMessage(entity.lei, entityId);
+      const blockedMessage = await findLeiConflictMessage(entity.lei, entityId, tx);
       if (blockedMessage) throw new ConflictError(blockedMessage);
     }
 

@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 
+import "@/server/request-clock"; // registers the per-visitor clock for now() on the server
+
 import {
   ConflictError,
   DeletedError,
