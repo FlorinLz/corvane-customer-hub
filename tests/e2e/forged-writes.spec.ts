@@ -91,10 +91,10 @@ test.describe("Forged write/read requests (M15 AC9, M16 AC4)", () => {
     expect(res.ok()).toBe(true);
   });
 
-  for (const { label, email } of WRONG_TEAM_USERS) {
-    test(`${label} resetting demo data returns 403`, async ({ request }) => {
+  for (const { label, email } of [...WRONG_TEAM_USERS, { label: "Ops (admin)", email: "adrian.koh@corvane.example" }]) {
+    test(`${label} resetting demo data returns 404: there is no public reset`, async ({ request }) => {
       const res = await asUser(request, email, "POST", "/api/demo/reset");
-      expect(res.status()).toBe(403);
+      expect(res.status()).toBe(404);
     });
   }
 

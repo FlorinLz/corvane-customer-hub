@@ -115,3 +115,39 @@ describe("next.config.ts derives NEXT_PUBLIC_-prefixed aliases for the demo cloc
     }
   });
 });
+
+describe("computeClockOffsetMs() with a visitor's arrival (per-visitor clock)", () => {
+  const START = "2026-10-05T08:05:00Z"; // Mon 05 Oct 2026, 10:05 CEST
+  const startMs = new Date(START).getTime();
+  const env = { DEMO_MODE: "true", DEMO_CLOCK_START: START };
+
+  it("every visitor starts at DEMO_CLOCK_START at their own arrival, whenever that was", () => {
+    for (const arrival of [Date.UTC(2026, 9, 14, 9, 0), Date.UTC(2026, 9, 21, 22, 30), Date.UTC(2027, 0, 3, 3, 3)]) {
+      expect(arrival + computeClockOffsetMs(env, arrival + 123_456, arrival)).toBe(startMs);
+    }
+  });
+
+  it("then runs in real time: 90 minutes after arriving it is 11:35 CEST", () => {
+    const arrival = Date.UTC(2026, 9, 14, 9, 0);
+    const realNow = arrival + 90 * 60_000;
+    expect(realNow + computeClockOffsetMs(env, realNow, arrival)).toBe(startMs + 90 * 60_000);
+  });
+
+  it("two visitors who arrived days apart have their own clocks, not one shared offset", () => {
+    const a = Date.UTC(2026, 9, 14, 9, 0);
+    const b = a + 3 * 24 * 60 * 60_000;
+    const realNow = b + 60_000;
+    expect(realNow + computeClockOffsetMs(env, realNow, a)).toBe(startMs + 3 * 24 * 60 * 60_000 + 60_000);
+    expect(realNow + computeClockOffsetMs(env, realNow, b)).toBe(startMs + 60_000);
+  });
+
+  it("DEMO_CLOCK_ANCHOR overrides the arrival", () => {
+    const anchor = "2026-10-05T07:55:00Z";
+    const withAnchor = { ...env, DEMO_CLOCK_ANCHOR: anchor };
+    expect(computeClockOffsetMs(withAnchor, Date.now(), Date.now() - 5 * 60_000)).toBe(startMs - new Date(anchor).getTime());
+  });
+
+  it("is off in production without DEMO_MODE, arrival or not", () => {
+    expect(computeClockOffsetMs({ NODE_ENV: "production", DEMO_CLOCK_START: START }, Date.now(), Date.now())).toBe(0);
+  });
+});

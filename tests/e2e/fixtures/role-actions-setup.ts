@@ -5,18 +5,15 @@ import { expect, type APIRequestContext, type Page } from "@playwright/test";
 import { db } from "@/server/db";
 import { signUserCookie, SESSION_COOKIE } from "@/server/session";
 
+import { resetDemoData } from "./reset";
+
 /**
  * Shared by role-actions.spec.ts and role-actions-screenshots.spec.ts. Both run
  * against a production build on the "role-actions" project's own port, whose
  * demo clock starts at Mon 05 Oct 2026, 10:48 CEST (the demo time).
  */
 
-export async function resetDemoData(request: APIRequestContext) {
-  const adrian = await db.user.findUniqueOrThrow({ where: { email: "adrian.koh@corvane.example" } });
-  const cookie = `${SESSION_COOKIE}=${signUserCookie(adrian.id)}`;
-  const res = await request.post("/api/demo/reset", { headers: { cookie } });
-  expect(res.ok()).toBe(true);
-}
+export { resetDemoData };
 
 export async function signInAs(page: Page, email: string) {
   const user = await db.user.findUniqueOrThrow({ where: { email } });

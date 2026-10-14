@@ -1,17 +1,14 @@
 "use client";
 
-import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-import { ResetDemoDataDialog } from "@/components/shell/ResetDemoDataDialog";
 import { cn } from "@/lib/utils";
 
 // Brief 6.12 "Layout: top bar, left sub-navigation (tabs above content at
 // 1024px), page content." Users is for the Admin only.
-export function AdminSidebar({ isAdmin, demoMode }: { isAdmin: boolean; demoMode: boolean }) {
+export function AdminSidebar({ isAdmin }: { isAdmin: boolean }) {
   const pathname = usePathname();
-  const [resetOpen, setResetOpen] = React.useState(false);
 
   const links = [
     isAdmin && { href: "/admin/users", label: "Users" },
@@ -41,20 +38,7 @@ export function AdminSidebar({ isAdmin, demoMode }: { isAdmin: boolean; demoMode
             );
           })}
         </div>
-        {isAdmin && demoMode && (
-          <>
-            <div className="mt-2 hidden border-t border-border pt-2 lg:block" />
-            <button
-              type="button"
-              onClick={() => setResetOpen(true)}
-              className="rounded-sm px-2 py-1.5 text-left text-body text-danger hover:bg-tint"
-            >
-              Reset demo data
-            </button>
-          </>
-        )}
       </nav>
-      {isAdmin && demoMode && <ResetDemoDataDialog open={resetOpen} onOpenChange={setResetOpen} />}
     </>
   );
 }

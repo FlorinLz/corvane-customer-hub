@@ -2,10 +2,11 @@ import "dotenv/config";
 
 import path from "node:path";
 
-import { expect, test, type APIRequestContext } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 
 import { signUserCookie, SESSION_COOKIE } from "@/server/session";
 import { db } from "@/server/db";
+import { resetDemoData } from "./fixtures/reset";
 
 /**
  * Fuller Home worklists: Home as Emma Wilson, Adrian Koh and Lukas Brenner at 1440 px right after Reset, at the demo start
@@ -16,15 +17,9 @@ import { db } from "@/server/db";
 const DIR = process.env.SHOTS_DIR;
 test.skip(!DIR, "SHOTS_DIR not set");
 
-async function reset(request: APIRequestContext) {
-  const adrian = await db.user.findUniqueOrThrow({ where: { email: "adrian.koh@corvane.example" } });
-  const res = await request.post("/api/demo/reset", { headers: { cookie: `${SESSION_COOKIE}=${signUserCookie(adrian.id)}` } });
-  expect(res.ok()).toBe(true);
-}
-
 test("Home as Emma, Adrian and Lukas right after Reset", async ({ page, request, context }) => {
   test.setTimeout(240_000);
-  await reset(request);
+  await resetDemoData(request);
   await page.setViewportSize({ width: 1440, height: 900 });
   for (const [name, email, chip] of [
     ["emma", "emma.wilson@corvane.example", "Issues (6)"],

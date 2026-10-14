@@ -95,7 +95,7 @@ export default async function RolesPermissionsPage() {
       </div>
 
       <div className="flex flex-col gap-1 text-meta text-text-secondary">
-        <p>The admin flag (Adrian Koh, Ops) adds Users &amp; roles, Deleted records, Roles &amp; permissions, the Audit tab and Reset demo data. It adds no edit rights on data.</p>
+        <p>The admin flag (Adrian Koh, Ops) adds Users &amp; roles, Deleted records, Roles &amp; permissions, and the Audit tab. It adds no edit rights on data.</p>
         <p>In the Partner context every contact role is owned by Network, except Billing, which Finance owns.</p>
       </div>
     </div>

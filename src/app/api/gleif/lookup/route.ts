@@ -43,4 +43,4 @@ export const POST = handle("gleif.lookup", async (req: Request) => {
     groupSuggestion,
     parentLegalName: parentFields.parentLegalName,
   };
-});
+}, { writes: false });

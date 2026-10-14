@@ -13,7 +13,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 
   return (
     <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
-      <AdminSidebar isAdmin={user.isAdmin} demoMode={process.env.DEMO_MODE === "true"} />
+      <AdminSidebar isAdmin={user.isAdmin} />
       <div className="min-w-0 flex-1">{children}</div>
     </div>
   );

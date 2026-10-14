@@ -4,6 +4,7 @@ import { expect, test } from "@playwright/test";
 
 import { db } from "@/server/db";
 import { signUserCookie, SESSION_COOKIE } from "@/server/session";
+import { resetDemoData } from "./fixtures/reset";
 
 /**
  * Milestone 8 live fix. Runs only under the `demo-clock-zones` Playwright
@@ -28,13 +29,6 @@ import { signUserCookie, SESSION_COOKIE } from "@/server/session";
 
 test.describe.configure({ mode: "serial" });
 
-async function resetDemoData(request: import("@playwright/test").APIRequestContext) {
-  const adrian = await db.user.findUniqueOrThrow({ where: { email: "adrian.koh@corvane.example" } });
-  const cookie = `${SESSION_COOKIE}=${signUserCookie(adrian.id)}`;
-  const res = await request.post("/api/demo/reset", { headers: { cookie } });
-  expect(res.ok()).toBe(true);
-}
-
 test("every date/time field parses and labels the viewer's own zone, never the browser's", async ({ page, request }) => {
   await resetDemoData(request);
 
@@ -53,11 +47,18 @@ test("every date/time field parses and labels the viewer's own zone, never the b
   await expect(reportDrawer.getByText("Corvane aware at can't be in the future")).not.toBeVisible();
   await page.keyboard.press("Escape");
 
+  // The customer's primary Incident contact: both dialogs below start on this person (the issue page's own incident-contact rule).
+  const incidentContact = await db.contact.findFirstOrThrow({
+    where: { entityId: mps.id, context: "CUSTOMER", role: "INCIDENT", status: "ACTIVE" },
+    orderBy: [{ isPrimary: "desc" }, { fullName: "asc" }],
+  });
+
   // Step 2: Record notification, on ISS-1042 (Emma is its communicator by now) -- same checks.
   await page.goto(`/issues/${issue1042.id}`);
   await page.getByRole("region", { name: "Message to the customer" }).getByRole("button", { name: "Record update" }).click(); // ISS-1042 already has its first notification
   const recordDialog = page.getByRole("dialog", { name: "Record notification" });
   await expect(recordDialog.getByText("CEST", { exact: true })).toBeVisible();
+  await expect(recordDialog.getByRole("combobox", { name: "Person" })).toContainText(`${incidentContact.fullName} (Incident contact)`); // preselected
   await expect(recordDialog.getByText("The time can't be in the future")).not.toBeVisible();
   await page.keyboard.press("Escape");
 
@@ -75,6 +76,7 @@ test("every date/time field parses and labels the viewer's own zone, never the b
   await page.getByRole("region", { name: "Message to the customer" }).getByRole("button", { name: "Confirm resolution with the customer", exact: true }).click();
   const closeDialog = page.getByRole("dialog", { name: "Confirm resolution" });
   await expect(closeDialog.getByText("CEST", { exact: true })).toBeVisible();
+  await expect(closeDialog.getByRole("combobox", { name: "Customer confirmation from" })).toContainText(`${incidentContact.fullName} (Incident contact)`); // preselected
   await expect(closeDialog.getByText("The time can't be in the future")).not.toBeVisible();
   await expect(closeDialog.getByText(/can't be before Resolved at/)).not.toBeVisible();
 

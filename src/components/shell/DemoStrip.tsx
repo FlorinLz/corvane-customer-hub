@@ -11,8 +11,8 @@ export function DemoStrip({ currentEmail, serverNow }: { currentEmail: string; s
       <span className="shrink-0 font-semibold">Demo mode</span>
       <DemoClock serverNow={serverNow} />
       {/* The notice takes the space between the clock and "View as" and gives way first: it truncates, with the full text as its title. */}
-      <span className="min-w-0 flex-1 truncate text-right text-white/70" title="Demo with fictional data. Bank names are illustrative; the incidents are invented.">
-        Demo with fictional data. Bank names are illustrative; the incidents are invented.
+      <span className="min-w-0 flex-1 truncate text-right text-white/70" title="Demo with fictional data. Bank names are illustrative; the incidents are invented. The demo resets after 20 minutes without changes.">
+        Demo with fictional data. Bank names are illustrative; the incidents are invented. The demo resets after 20 minutes without changes.
       </span>
       <label htmlFor="view-as" className="shrink-0 text-white/85">
         View as

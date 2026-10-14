@@ -6,6 +6,7 @@ import { db } from "@/server/db";
 import { signUserCookie, SESSION_COOKIE } from "@/server/session";
 import { effectiveCommunicator } from "@/server/derived/communicator";
 import { formatInZone } from "@/lib/time-zones";
+import { resetDemoData } from "./fixtures/reset";
 
 /**
  * demo-clock-writes bug fix. Runs only under the `demo-clock-skew`
@@ -28,13 +29,6 @@ import { formatInZone } from "@/lib/time-zones";
  */
 
 test.describe.configure({ mode: "serial" });
-
-async function resetDemoData(request: import("@playwright/test").APIRequestContext) {
-  const adrian = await db.user.findUniqueOrThrow({ where: { email: "adrian.koh@corvane.example" } });
-  const cookie = `${SESSION_COOKIE}=${signUserCookie(adrian.id)}`;
-  const res = await request.post("/api/demo/reset", { headers: { cookie } });
-  expect(res.ok()).toBe(true);
-}
 
 async function signInAs(page: Page, userId: string) {
   await page.context().addCookies([{ name: SESSION_COOKIE, value: signUserCookie(userId), domain: "localhost", path: "/" }]);

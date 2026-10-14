@@ -1,5 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
+import { SERVER_ENV } from "./tests/e2e/fixtures/server-env";
+
 // demo-clock-writes bug fix: a deliberate gap between the demo clock and the
 // real calendar date. Any business timestamp still written from the database's
 // own real clock instead of the app's own now() would land at least this far
@@ -13,8 +15,6 @@ import { defineConfig, devices } from "@playwright/test";
 // whenever it fell on a weekend or outside those hours. A fixed anchor passes on
 // any date; the gap to real time only grows, which still separates a real-clock
 // write from a demo-clock write (demo-clock-skew.spec.ts's lower bound is 36h).
-const DEMO_CLOCK_SKEW_ANCHOR = new Date().toISOString();
-const DEMO_CLOCK_SKEW_START = "2026-10-07T05:00:00.000Z";
 // Without DEMO_CLOCK_ANCHOR, src/lib/dates.ts computes clockOffsetMs from
 // Date.now() at module-load time -- fine for the long-running server
 // process (one offset for its whole lifetime), but every full page
@@ -29,7 +29,7 @@ const DEMO_CLOCK_SKEW_START = "2026-10-07T05:00:00.000Z";
 
 export default defineConfig({
   testDir: "./tests/e2e",
-  // `scenario*-short.spec.ts` files call POST /api/demo/reset, which
+  // `scenario*-short.spec.ts` files reset the demo data (fixtures/reset.ts), which
   // truncates and reseeds every table (brief 3.8.2) — a destructive,
   // whole-database action no other spec's assumptions survive if it runs
   // concurrently. forged-writes.spec.ts and access-pages.spec.ts both
@@ -49,7 +49,7 @@ export default defineConfig({
     trace: "on-first-retry",
   },
   projects: [
-    { name: "chromium", use: { ...devices["Desktop Chrome"] }, testIgnore: [/(scenario5-issue-flow-short|seed-worklists-screenshots)\.spec\.ts$/, /demo-clock-zones\.spec\.ts$/, /demo-clock-skew\.spec\.ts$/, /(role-actions(-screenshots)?|action-plan-order-screenshots|assess-after-resolve|root-cause-report(-screenshots)?|issue-v5-screenshots|issue-times(-screenshots)?|issue-sections(-screenshots)?|report-from-home(-screenshots)?|ux-polish(-screenshots)?|small-fixes-v7)\.spec\.ts$/] },
+    { name: "chromium", use: { ...devices["Desktop Chrome"] }, testIgnore: [/(scenario5-issue-flow-short|seed-worklists-screenshots)\.spec\.ts$/, /(demo-clock-zones|visitor-clock)\.spec\.ts$/, /demo-clock-skew\.spec\.ts$/, /(role-actions(-screenshots)?|action-plan-order-screenshots|assess-after-resolve|root-cause-report(-screenshots)?|issue-v5-screenshots|issue-times(-screenshots)?|issue-sections(-screenshots)?|report-from-home(-screenshots)?|ux-polish(-screenshots)?|small-fixes-v7)\.spec\.ts$/] },
     // Brief 7.3.2 E2E-5 setup: its own project and webServer, since it
     // needs a different DEMO_CLOCK_START (Monday 05 Oct, the E2E-5
     // reference day) from every other spec's Friday 02 Oct clock. A
@@ -77,7 +77,7 @@ export default defineConfig({
     // browser's zone instead of the viewer's own would fail this project
     // even though every other project's `timezoneId: "Europe/Berlin"`
     // workaround (see its own comment above) would hide it by accident.
-    { name: "demo-clock-zones", use: { ...devices["Desktop Chrome"], baseURL: "http://localhost:3102", timezoneId: "Europe/Bucharest" }, testMatch: /demo-clock-zones\.spec\.ts$/ },
+    { name: "demo-clock-zones", use: { ...devices["Desktop Chrome"], baseURL: "http://localhost:3102", timezoneId: "Europe/Bucharest" }, testMatch: /(demo-clock-zones|visitor-clock)\.spec\.ts$/ },
     // demo-clock-writes bug fix: another dedicated production build (same
     // reasoning as demo-clock-zones above -- this bug is in server-side
     // write code, not client bundle inlining, but the user's own test
@@ -100,27 +100,14 @@ export default defineConfig({
       // GLEIF clock so the scenario specs' literal date/field assertions
       // are deterministic. Harmless to the other e2e specs (forged-writes,
       // access-pages), which don't make clock- or GLEIF-sensitive assertions.
-      env: {
-        DEMO_MODE: "true",
-        GLEIF_FORCE_CACHE: "true",
-        GLEIF_SEED_SOURCE: "cache",
-        GLEIF_CACHE_PATH: "tests/e2e/fixtures/gleif-cache.json",
-        DEMO_CLOCK_START: "2026-10-02T09:00:00+03:00",
-      },
+      env: SERVER_ENV.main,
     },
     {
       command: "npm run dev:e2e-issues",
       url: "http://localhost:3101",
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,
-      env: {
-        DEMO_MODE: "true",
-        GLEIF_FORCE_CACHE: "true",
-        GLEIF_SEED_SOURCE: "cache",
-        GLEIF_CACHE_PATH: "tests/e2e/fixtures/gleif-cache.json",
-        // Brief 7.3.2 E2E-5 setup: Monday 05 Oct 2026, 10:05 CEST.
-        DEMO_CLOCK_START: "2026-10-05T08:05:00Z",
-      },
+      env: SERVER_ENV.issues,
     },
     // Milestone 8 live fix (demo-clock-zones.spec.ts): a real production
     // build (`next build`, not `next dev`), so NODE_ENV=production and the
@@ -134,13 +121,7 @@ export default defineConfig({
       url: "http://localhost:3102",
       reuseExistingServer: !process.env.CI,
       timeout: 180_000,
-      env: {
-        DEMO_MODE: "true",
-        GLEIF_FORCE_CACHE: "true",
-        GLEIF_SEED_SOURCE: "cache",
-        GLEIF_CACHE_PATH: "tests/e2e/fixtures/gleif-cache.json",
-        DEMO_CLOCK_START: "2026-10-06T13:14:00+02:00",
-      },
+      env: SERVER_ENV.zones,
     },
     // demo-clock-writes bug fix: its own production build and port, same
     // reasoning as the demo-clock-zones webServer above.
@@ -149,14 +130,7 @@ export default defineConfig({
       url: "http://localhost:3103",
       reuseExistingServer: !process.env.CI,
       timeout: 180_000,
-      env: {
-        DEMO_MODE: "true",
-        GLEIF_FORCE_CACHE: "true",
-        GLEIF_SEED_SOURCE: "cache",
-        GLEIF_CACHE_PATH: "tests/e2e/fixtures/gleif-cache.json",
-        DEMO_CLOCK_START: DEMO_CLOCK_SKEW_START,
-        DEMO_CLOCK_ANCHOR: DEMO_CLOCK_SKEW_ANCHOR,
-      },
+      env: SERVER_ENV.skew,
     },
     // Role actions PR: its own production build and port, same reasoning as the two above.
     {
@@ -164,14 +138,7 @@ export default defineConfig({
       url: "http://localhost:3104",
       reuseExistingServer: !process.env.CI,
       timeout: 240_000,
-      env: {
-        DEMO_MODE: "true",
-        GLEIF_FORCE_CACHE: "true",
-        GLEIF_SEED_SOURCE: "cache",
-        GLEIF_CACHE_PATH: "tests/e2e/fixtures/gleif-cache.json",
-        DEMO_CLOCK_START: "2026-10-05T08:48:00Z",
-        DEMO_CLOCK_ANCHOR: DEMO_CLOCK_SKEW_ANCHOR,
-      },
+      env: SERVER_ENV.roles,
     },
   ],
 });

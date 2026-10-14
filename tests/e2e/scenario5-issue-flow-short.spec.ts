@@ -1,9 +1,10 @@
 import "dotenv/config";
 
-import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 
 import { signUserCookie, SESSION_COOKIE } from "@/server/session";
 import { db } from "@/server/db";
+import { resetDemoData } from "./fixtures/reset";
 
 /**
  * Brief 7.3.2 E2E-5 `scenario5-issue-flow.spec.ts`, R1 short spec
@@ -26,13 +27,6 @@ const FROZEN_TIME = new Date("2026-10-05T08:05:00Z");
 
 test.describe.configure({ mode: "serial" });
 
-async function resetDemoData(request: APIRequestContext) {
-  const adrian = await db.user.findUniqueOrThrow({ where: { email: "adrian.koh@corvane.example" } });
-  const cookie = `${SESSION_COOKIE}=${signUserCookie(adrian.id)}`;
-  const res = await request.post("/api/demo/reset", { headers: { cookie } });
-  expect(res.ok()).toBe(true);
-}
-
 /** Brief 7.3.2: "Helper viewAs(team) uses the switcher in the demo strip." */
 async function viewAs(page: Page, optionLabel: string) {
   await page.getByRole("combobox", { name: "View as" }).click();
@@ -51,13 +45,15 @@ async function moreAction(page: Page, name: string) {
 }
 
 /**
- * This spec freezes the browser's clock at DEMO_CLOCK_START while the dev server's own demo clock keeps running, so by the time a
- * dialog prefills "now" the browser's time can be minutes behind the server's resolution. Put the browser's clock 10 s after the
- * resolution (the same minute, as in the demo when Adrian closes right after Lukas resolves): no data is touched.
+ * This spec freezes the browser's own clock, and a page learns the demo time from the server when it loads (window.__chClockOffsetMs,
+ * src/lib/dates.ts). So after another user resolved the issue, a page that was loaded earlier still shows the demo time of its load,
+ * before the resolution. Reload it: the page takes the server's demo time again, which is after the resolution (as in the demo,
+ * where Adrian closes right after Lukas resolves). No data is touched.
  */
 async function browserClockJustAfterResolution(page: Page, number: number) {
   const issue = await db.issue.findFirstOrThrow({ where: { number } });
-  await page.clock.setFixedTime(new Date(issue.resolvedAt!.getTime() + 10_000));
+  expect(issue.resolvedAt, `ISS-${number} is resolved`).not.toBeNull();
+  await page.reload();
 }
 
 /** The one "Record notification" button inside the "Message to the customer" panel ("Message to the partner" on a partner issue). */
