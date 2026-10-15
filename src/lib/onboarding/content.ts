@@ -12,7 +12,7 @@ export const STORAGE_KEYS = {
   welcomeDismissed: "ch_onboarding_welcome_v1",
   mobileDismissed: "ch_onboarding_mobile_v1",
   seen: "ch_onboarding_seen_v1",
-  panel: "ch_onboarding_panel_v1",
+  panel: "ch_onboarding_panel_v2",
 } as const;
 
 /** The opening of the welcome card from anywhere (the demo bar's "?"). */
@@ -38,8 +38,8 @@ export const WELCOME = {
   step3: {
     title: "See it in action",
     cards: {
-      1: { label: "Scenario 1 \u00b7 2 min", title: "The night Sev-1, the morning after", text: "A bank's checks failed overnight; see how Customer Success picks it up at 10:05." },
-      2: { label: "Scenario 2 \u00b7 3 min", title: "A partner bank goes down", text: "Report it once, notify every affected customer, resolve once." },
+      1: { label: "Scenario 1 \u00b7 2 min, plus an optional 3 min chapter", title: "The night Sev-1, the morning after", text: "A bank's name checks failed overnight. At 10:05 Customer Success picks it up and briefs the customer." },
+      2: { label: "Scenario 2 \u00b7 4 min", title: "A partner bank goes down", text: "Lloyds reports trouble on its side. Report it once, tell every affected customer, resolve once." },
     },
     explore: "Explore on my own",
     note: "Switch person any time with View as in the dark bar. The demo resets itself after 20 minutes without changes.",
@@ -53,13 +53,26 @@ export const WELCOME = {
 export const MOBILE_NOTICE = "Customer Hub is built for desktop. Open it on a laptop for the full demo.";
 
 export type ScenarioId = 1 | 2;
+/** Scenario 1 has two chapters; scenario 2 has one. */
+export type ChapterId = "1a" | "1b" | "2";
 
 /** What the server reports about the data (src/server/queries/onboarding.ts). */
 export interface OnboardingState {
   /** DemoMeta.seedVersion: a restore starts every scenario again. */
   seedVersion: number;
-  scenario1: { issueId: string | null; updateRecorded: boolean };
+  scenario1: {
+    issueId: string | null;
+    updateRecorded: boolean;
+    /** Chapter 2: each is true once the data says so. */
+    resolved: boolean;
+    confirmed: boolean;
+    draftShared: boolean;
+    approved: boolean;
+    sent: boolean;
+  };
   scenario2: {
+    /** Lloyds Bank plc, the entity page the impact step opens. */
+    partnerEntityId: string | null;
     issueId: string | null;
     acknowledged: boolean;
     degraded: boolean;
@@ -73,12 +86,11 @@ export interface ScenarioStep {
   id: string;
   title: string;
   text: string;
-  optional?: boolean;
   /** The persona the step is told from (a DEMO_USERS email). */
   persona: string;
   personaName: string;
-  /** Where "Take me there" goes: Home, or the scenario's issue page. */
-  page: "home" | "issue";
+  /** Where "Take me there" goes: Home, the scenario's issue page, or the partner's entity page (its Partner tab). */
+  page: "home" | "issue" | "entity";
   /** data-onboarding value scrolled to after the jump. */
   anchor: string;
   /**
@@ -89,122 +101,240 @@ export interface ScenarioStep {
   needsPersona?: boolean;
 }
 
+/** What the end of a chapter offers: the next chapter and a way out, or the link to the README. */
+export type ChapterAction = "continue" | "finish" | "built";
+
+export interface Chapter {
+  id: ChapterId;
+  scenario: ScenarioId;
+  /** Shown in the panel header for scenario 1's two chapters. */
+  title: string | null;
+  prologue: string[];
+  /** Scenario 2: the message that starts it, shown under the prologue. */
+  signal?: { from: string; subject: string; body: string; footnote: string };
+  steps: ScenarioStep[];
+  end: { text: string; actions: ChapterAction[] };
+}
+
 export interface Scenario {
   id: ScenarioId;
   title: string;
-  subtitle: string;
-  steps: ScenarioStep[];
+  chapters: Chapter[];
 }
 
 const EMMA = { persona: "emma.wilson@corvane.example", personaName: "Emma Wilson" };
 const LUKAS = { persona: "lukas.brenner@corvane.example", personaName: "Lukas Brenner" };
 const ADRIAN = { persona: "adrian.koh@corvane.example", personaName: "Adrian Koh" };
+const KEVIN = { persona: "kevin.lim@corvane.example", personaName: "Kevin Lim" };
+const MEI = { persona: "mei.chen@corvane.example", personaName: "Mei Chen" };
+
+export const CONTINUE_LABEL = "Continue: Closing the loop \u00b7 3 min";
+export const FINISH_LABEL = "Finish here";
 
 export const SCENARIOS: Record<ScenarioId, Scenario> = {
   1: {
     id: 1,
     title: "The night Sev-1, the morning after",
-    subtitle: "ISS-1042: every name check for Banca Monte dei Paschi di Siena failed overnight.",
-    steps: [
+    chapters: [
       {
-        id: "s1-home",
-        title: "Start on Home as Emma Wilson",
-        text: "Emma is in Customer Success and talks to the customer this morning. Her issue and her next action are at the top of Home.",
-        ...EMMA,
-        page: "home",
-        anchor: "home-issues",
-        check: "viewed",
-        needsPersona: true,
+        id: "1a",
+        scenario: 1,
+        title: "The morning after",
+        prologue: [
+          "Monday, 10:05. Emma Wilson starts her day in Customer Success. Overnight, every name check for Banca Monte dei Paschi di Siena (MPS) failed, and Kevin Lim in Ops handled it.",
+          "Without one shared place, Emma would rebuild the night from Kevin's emails, a chat thread and the monitoring tool while MPS waits for news. Here is her morning in Customer Hub.",
+        ],
+        steps: [
+          {
+            id: "s1-home",
+            title: "Start on Home as Emma Wilson",
+            text: "Emma speaks for Corvane to MPS. ISS-1042 is at the top of her Home, and Next actions shows who it waits on: Kevin, still investigating.",
+            ...EMMA,
+            page: "home",
+            anchor: "home-issues",
+            check: "viewed",
+            needsPersona: true,
+          },
+          {
+            id: "s1-issue",
+            title: "Open ISS-1042",
+            text: "Your next action shows Emma has nothing due and names who is next. The Action plan shows the night in process order: the alert, Kevin's acknowledgement 9 minutes later, the customer told within the hour.",
+            ...EMMA,
+            page: "issue",
+            anchor: "action-plan",
+            check: "viewed",
+            needsPersona: true,
+          },
+          {
+            id: "s1-log",
+            title: "Read the Communication log",
+            text: "Kevin wrote to Silvia Moretti, the MPS incident contact, during the night. Emma reads exactly what was promised before she speaks to her.",
+            ...EMMA,
+            page: "issue",
+            anchor: "communication-log",
+            check: "viewed",
+          },
+          {
+            id: "s1-compliance",
+            title: "Look at the Compliance card",
+            text: "MPS is a bank under DORA, so ISS-1042 is flagged for Compliance. Mei Chen assessed it as a possible major incident: MPS may have to report it to its regulator and needs the facts from Corvane within 2 hours, as Customer obligations shows.",
+            ...EMMA,
+            page: "issue",
+            anchor: "compliance-card",
+            check: "viewed",
+          },
+          {
+            id: "s1-update",
+            title: "Send the Update",
+            text: "Send Silvia an Update from the message panel, then record it. The Communication log shows it at once, with Emma's name and the time.",
+            ...EMMA,
+            page: "issue",
+            anchor: "message-panel",
+            check: "data",
+          },
+        ],
+        end: {
+          text: "MPS is up to date. ISS-1042 still has to be resolved, confirmed with the customer and explained in a root cause report that Compliance approves.",
+          actions: ["continue", "finish"],
+        },
       },
       {
-        id: "s1-issue",
-        title: "Open ISS-1042",
-        text: "Read Your next action, then the Action plan in process order. It shows who did what overnight.",
-        ...EMMA,
-        page: "issue",
-        anchor: "action-plan",
-        check: "viewed",
-        needsPersona: true,
-      },
-      {
-        id: "s1-log",
-        title: "Read the Communication log",
-        text: "Kevin Lim told the customer during the night. The handover to Emma is recorded, so she starts with the full story.",
-        ...EMMA,
-        page: "issue",
-        anchor: "communication-log",
-        check: "viewed",
-      },
-      {
-        id: "s1-compliance",
-        title: "Look at the Compliance card",
-        text: "The Compliance card and the customer obligations show why the regulator deadline matters for this bank.",
-        ...EMMA,
-        page: "issue",
-        anchor: "compliance-card",
-        check: "viewed",
-      },
-      {
-        id: "s1-update",
-        title: "Send the Update",
-        text: "Send the Update from the message panel, then record it. The log and the next action change at once.",
-        optional: true,
-        ...EMMA,
-        page: "issue",
-        anchor: "message-panel",
-        check: "data",
+        id: "1b",
+        scenario: 1,
+        title: "Closing the loop",
+        prologue: [
+          "Kevin's certificate fix holds: MPS name checks are back to normal. The MPS contract asks for a root cause report within 20 days of resolution, and Compliance approves it before it goes out. Five steps, three people, one issue.",
+        ],
+        steps: [
+          {
+            id: "s1b-resolve",
+            title: "Resolve as Kevin Lim",
+            text: "Switch to Kevin with View as. As owner he resolves ISS-1042. Watch the Action plan: the report steps appear, each with its person and deadline.",
+            ...KEVIN,
+            page: "issue",
+            anchor: "action-plan",
+            check: "data",
+          },
+          {
+            id: "s1b-confirm",
+            title: "Confirm resolution as Emma Wilson",
+            text: "Emma checks with Silvia that payments flow again and records it. The customer side is done; the report is still open.",
+            ...EMMA,
+            page: "issue",
+            anchor: "action-plan",
+            check: "data",
+          },
+          {
+            id: "s1b-share",
+            title: "Share the draft report as Kevin",
+            text: "Kevin writes what failed and why, and shares the draft. The deadline is 20 days from resolution, taken from the MPS contract.",
+            ...KEVIN,
+            page: "issue",
+            anchor: "action-plan",
+            check: "data",
+          },
+          {
+            id: "s1b-approve",
+            title: "Approve as Mei Chen",
+            text: "Mei reads the draft with the regulator in mind. She approves it, or asks for changes and it goes back to Kevin with her reason.",
+            ...MEI,
+            page: "issue",
+            anchor: "action-plan",
+            check: "data",
+          },
+          {
+            id: "s1b-send",
+            title: "Send the approved report as Kevin",
+            text: "Kevin sends the approved report to MPS. ISS-1042 closes on its own: every step is done, and nothing is left on anyone's Home.",
+            ...KEVIN,
+            page: "issue",
+            anchor: "action-plan",
+            check: "data",
+          },
+        ],
+        end: {
+          text: "From a monitoring alert at night to an approved report: Ops, Customer Success and Compliance, each person seeing only their next step.",
+          actions: ["built"],
+        },
       },
     ],
   },
   2: {
     id: 2,
     title: "A partner bank goes down",
-    subtitle: "Lloyds Bank plc is degraded on UK CoP in GB. Every customer that relies on it needs to hear from us.",
-    steps: [
+    chapters: [
       {
-        id: "s2-report",
-        title: "Report the issue as Lukas Brenner",
-        text: "Lukas is in Network. From Home, use Report issue: Lloyds Bank plc, Partner degraded or unavailable, UK CoP, GB.",
-        ...LUKAS,
-        page: "home",
-        anchor: "home-issues",
-        check: "data",
-      },
-      {
-        id: "s2-degraded",
-        title: "Acknowledge, then set to Degraded",
-        text: "Acknowledge the issue, then set the partner to Degraded. Affected customers lists every customer with its own deadline.",
-        ...LUKAS,
-        page: "issue",
-        anchor: "affected-customers",
-        check: "data",
-      },
-      {
-        id: "s2-linked",
-        title: "Create linked issues",
-        text: "Create one issue per affected customer. Each one has its own communicator, so every customer hears from one person.",
-        ...LUKAS,
-        page: "issue",
-        anchor: "linked-issues",
-        check: "data",
-      },
-      {
-        id: "s2-notify",
-        title: "Notify Revolut Ltd as Adrian Koh",
-        text: "On Adrian's Home, the next action reads Notify Revolut Ltd. Record the notification and the deadline clears.",
-        ...ADRIAN,
-        page: "home",
-        anchor: "home-issues",
-        check: "data",
-      },
-      {
-        id: "s2-resolve",
-        title: "Resolve once, as Lukas",
-        text: "Resolve the partner issue. Every linked issue resolves with it.",
-        ...LUKAS,
-        page: "issue",
-        anchor: "linked-issues",
-        check: "data",
+        id: "2",
+        scenario: 2,
+        title: null,
+        prologue: [
+          "Lloyds Bank plc is one of Corvane's partner banks: it answers UK Confirmation of Payee checks for customers such as Revolut. When Lloyds slows down, all of those customers see failed checks, and each is owed a notice within its own contract deadline. Lukas Brenner in Network looks after partners.",
+        ],
+        signal: {
+          from: "Paul Grant, Incident contact, Lloyds Bank plc",
+          subject: "CoP responses delayed",
+          body: "We are seeing elevated timeouts on Confirmation of Payee responses since this morning. Our engineers are investigating. Next update within the hour.",
+          footnote: "Paul became Lloyds' incident contact 20 days ago. His name is on the Lloyds page, so Lukas knows the message is genuine and whom to reply to.",
+        },
+        steps: [
+          {
+            id: "s2-impact",
+            title: "Check who depends on Lloyds",
+            // The Partner tab's UK CoP / GB card lists the customers on that coverage (the rule shared with Affected customers).
+            text: "As Lukas, open the Lloyds Partner tab. UK CoP / GB lists every customer that sends its checks through Lloyds. These are the customers waiting on Lukas.",
+            ...LUKAS,
+            page: "entity",
+            anchor: "partner-customers",
+            check: "viewed",
+            needsPersona: true,
+          },
+          {
+            id: "s2-report",
+            title: "Report the issue",
+            text: "From Home, use Report issue. Anyone at Corvane can report, and it takes under a minute. The hints next to the form show what to enter.",
+            ...LUKAS,
+            page: "home",
+            anchor: "home-issues",
+            check: "data",
+          },
+          {
+            id: "s2-degraded",
+            title: "Acknowledge, then set to Degraded",
+            text: "Acknowledging starts the work. Degraded marks Lloyds on every customer that relies on it, and Affected customers lists each one with its own notice deadline.",
+            ...LUKAS,
+            page: "issue",
+            anchor: "affected-customers",
+            check: "data",
+          },
+          {
+            id: "s2-linked",
+            title: "Create linked issues",
+            text: "One issue per affected customer, each with its own communicator. Every customer hears from one person who already knows them.",
+            ...LUKAS,
+            page: "issue",
+            anchor: "linked-issues",
+            check: "data",
+          },
+          {
+            id: "s2-notify",
+            title: "Notify Revolut Ltd as Adrian Koh",
+            text: "Switch to Adrian. His Home shows Notify Revolut Ltd with the time left. Record the notification and the deadline clears.",
+            ...ADRIAN,
+            page: "home",
+            anchor: "home-issues",
+            check: "data",
+          },
+          {
+            id: "s2-resolve",
+            title: "Resolve once, as Lukas",
+            text: "Paul confirms the fix. Lukas resolves the partner issue, and every linked issue resolves with it.",
+            ...LUKAS,
+            page: "issue",
+            anchor: "linked-issues",
+            check: "data",
+          },
+        ],
+        end: { text: "One report, every affected customer told by their own contact, one resolution.", actions: ["built"] },
       },
     ],
   },
@@ -212,12 +342,26 @@ export const SCENARIOS: Record<ScenarioId, Scenario> = {
 
 export const SCENARIO_END = "See how it was built";
 
+export function chapterOf(id: ChapterId): Chapter {
+  for (const s of Object.values(SCENARIOS)) {
+    const c = s.chapters.find((ch) => ch.id === id);
+    if (c) return c;
+  }
+  throw new Error(`No chapter ${id}`);
+}
+
 /** Which steps the data says are done. Steps with check "viewed" are not in here: the browser decides those. */
 export function doneFromData(state: OnboardingState | null): Record<string, boolean> {
   if (!state) return {};
+  const s1 = state.scenario1;
   const s2 = state.scenario2;
   return {
-    "s1-update": state.scenario1.updateRecorded,
+    "s1-update": s1.updateRecorded,
+    "s1b-resolve": s1.resolved,
+    "s1b-confirm": s1.confirmed,
+    "s1b-share": s1.draftShared,
+    "s1b-approve": s1.approved,
+    "s1b-send": s1.sent,
     "s2-report": s2.issueId !== null,
     "s2-degraded": s2.issueId !== null && s2.acknowledged && s2.degraded,
     "s2-linked": s2.linkedCount > 0,
@@ -226,9 +370,10 @@ export function doneFromData(state: OnboardingState | null): Record<string, bool
   };
 }
 
-/** The page a step opens, or null when its issue does not exist yet. */
+/** The page a step opens, or null when its issue or entity does not exist yet. */
 export function stepHref(step: ScenarioStep, scenario: ScenarioId, state: OnboardingState | null): string | null {
   if (step.page === "home") return "/";
+  if (step.page === "entity") return state?.scenario2.partnerEntityId ? `/entities/${state.scenario2.partnerEntityId}/partner` : null;
   const issueId = scenario === 1 ? state?.scenario1.issueId : state?.scenario2.issueId;
   return issueId ? `/issues/${issueId}` : null;
 }

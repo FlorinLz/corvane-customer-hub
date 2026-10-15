@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
 import { apiRequest } from "@/lib/api-client";
+import { DraftHint } from "@/components/onboarding/hints";
 import { isReportLink } from "@/lib/validation/issues";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader } from "@/components/ui/dialog";
@@ -74,6 +75,7 @@ export function ShareDraftDialog({ issueId, version, displayId, entityName, trig
             <label htmlFor="share-draft-link" className="text-meta text-text-secondary">Draft link *</label>
             <Input id="share-draft-link" value={link} onChange={(e) => setLink(e.target.value)} placeholder="https://docs.corvane-internal.example/reports/…" aria-invalid={!!linkError} />
             {linkError ? <FieldError>{linkError}</FieldError> : <p className="text-meta text-text-secondary">Only links on docs.corvane-internal.example.</p>}
+            <DraftHint onUse={setLink} />
           </div>
           <div className="flex flex-col gap-1">
             <label htmlFor="share-draft-summary" className="text-meta text-text-secondary">Summary *</label>

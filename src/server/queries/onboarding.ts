@@ -10,16 +10,27 @@ const RESOLVED = ["RESOLVED", "CLOSED"] as const;
  * done. Scenario 1 is the seeded ISS-1042. Scenario 2's issue is the newest Partner degraded issue on Lloyds Bank plc, UK CoP, GB, that is not itself linked to another.
  */
 export async function loadOnboardingState(): Promise<OnboardingState> {
-  const [meta, iss1042, partnerIssue] = await Promise.all([
+  const [meta, iss1042, partnerIssue, lloyds] = await Promise.all([
     db.demoMeta.findUnique({ where: { id: 1 }, select: { seedVersion: true } }),
-    db.issue.findUnique({ where: { number: 1042 }, select: { id: true, communications: { where: { type: "UPDATE" }, select: { id: true }, take: 1 } } }),
+    db.issue.findUnique({
+      where: { number: 1042 },
+      select: {
+        id: true,
+        resolvedAt: true,
+        communications: { where: { type: { in: ["UPDATE", "CLOSURE_CONFIRMED"] } }, select: { type: true } },
+        rootCauseTask: { select: { draftSharedAt: true, approvedAt: true, sentAt: true } },
+      },
+    }),
     db.issue.findFirst({
       // Not a linked issue: Lloyds is also a customer, so fanning out creates a Partner degraded issue for Lloyds itself.
       where: { type: "PARTNER_DEGRADED", scheme: "UK_COP", country: "GB", entity: { legalName: LLOYDS, deletedAt: null }, parentLinks: { none: {} } },
       orderBy: { createdAt: "desc" },
       select: { id: true, status: true, acknowledgedAt: true, createdAt: true, entityId: true },
     }),
+    db.entity.findFirst({ where: { legalName: LLOYDS, deletedAt: null }, select: { id: true } }),
   ]);
+  const comms = iss1042?.communications ?? [];
+  const task = iss1042?.rootCauseTask ?? null;
 
   let degraded = false;
   let linkedCount = 0;
@@ -43,8 +54,17 @@ export async function loadOnboardingState(): Promise<OnboardingState> {
 
   return {
     seedVersion: meta?.seedVersion ?? 0,
-    scenario1: { issueId: iss1042?.id ?? null, updateRecorded: (iss1042?.communications.length ?? 0) > 0 },
+    scenario1: {
+      issueId: iss1042?.id ?? null,
+      updateRecorded: comms.some((c) => c.type === "UPDATE"),
+      resolved: !!iss1042?.resolvedAt,
+      confirmed: comms.some((c) => c.type === "CLOSURE_CONFIRMED"),
+      draftShared: !!task?.draftSharedAt,
+      approved: !!task?.approvedAt,
+      sent: !!task?.sentAt,
+    },
     scenario2: {
+      partnerEntityId: lloyds?.id ?? null,
       issueId: partnerIssue?.id ?? null,
       acknowledged: !!partnerIssue?.acknowledgedAt,
       degraded,

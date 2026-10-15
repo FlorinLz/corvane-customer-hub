@@ -10,8 +10,8 @@ When a check breaks, four teams must act fast and one person must speak to the c
 
 ### Two scenarios
 
-1. **The night Sev-1, the morning after (2 min).** A bank's name checks failed overnight. As Emma Wilson, follow ISS-1042: her next action, the action plan, who told the customer at night, why the regulator deadline matters.
-2. **A partner bank goes down (3 min).** Lloyds degrades. As Lukas Brenner report it, create one linked issue per affected customer, notify Revolut as Adrian Koh, then resolve once for all.
+1. **The night Sev-1, the morning after (2 min, plus a 3 min chapter).** The morning after: Emma Wilson picks up ISS-1042 after a night of failed name checks. Closing the loop: resolution, Compliance approval and the root cause report, until the issue closes by itself.
+2. **A partner bank goes down (4 min).** A message from Lloyds, who depends on it, report once, notify every affected customer, resolve once.
 
 ### Five principles
 
