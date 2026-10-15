@@ -62,7 +62,7 @@ export function ShareDraftDialog({ issueId, version, displayId, entityName, trig
         }
       }}
     >
-      <Button variant={triggerVariant} onClick={() => setOpen(true)}>
+      <Button data-onboarding="share-draft" variant={triggerVariant} onClick={() => setOpen(true)}>
         Share draft
       </Button>
       <DialogContent>
@@ -89,7 +89,7 @@ export function ShareDraftDialog({ issueId, version, displayId, entityName, trig
           <Button variant="secondary" onClick={() => setOpen(false)} disabled={pending}>
             Cancel
           </Button>
-          <Button disabled={!valid} loading={pending} onClick={() => void save()}>
+          <Button data-onboarding="share-draft-submit" disabled={!valid} loading={pending} onClick={() => void save()}>
             Share draft
           </Button>
         </DialogFooter>

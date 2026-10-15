@@ -59,6 +59,7 @@ export function TabBar({
               active && "border-primary bg-selected font-semibold text-primary",
             )}
             aria-current={active ? "page" : undefined}
+            data-onboarding={`${tab.key}-tab`}
           >
             {tab.label}
           </Link>

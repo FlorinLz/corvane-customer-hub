@@ -80,7 +80,7 @@ export function DraftHint({ onUse }: { onUse: (link: string) => void }) {
         <Lightbulb className="size-3.5 shrink-0 text-link-text" aria-hidden />
         For example {link}
       </span>
-      <button type="button" onClick={() => onUse(link)} className="text-link-text hover:underline">
+      <button type="button" data-onboarding="use-example-link" onClick={() => onUse(link)} className="text-link-text hover:underline">
         Use example link
       </button>
     </p>

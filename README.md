@@ -13,6 +13,8 @@ When a check breaks, four teams must act fast and one person must speak to the c
 1. **The night Sev-1, the morning after (2 min, plus a 3 min chapter).** The morning after: Emma Wilson picks up ISS-1042 after a night of failed name checks. Closing the loop: resolution, Compliance approval and the root cause report, until the issue closes by itself.
 2. **A partner bank goes down (4 min).** A message from Lloyds, who depends on it, report once, notify every affected customer, resolve once.
 
+In the scenario panel only the current step is open. It lists what to do in order, with the exact button names in bold, and Take me there switches the person, opens the page and rings the button to click.
+
 ### Five principles
 
 1. Anyone can report an issue.

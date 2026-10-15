@@ -192,7 +192,7 @@ export function ChangeStatusDialog({
           <Button variant="secondary" onClick={() => setOpen(false)} disabled={pending}>
             Cancel
           </Button>
-          <Button disabled={!valid} loading={pending} onClick={() => void save()}>
+          <Button data-onboarding={isResolve ? "resolve-submit" : undefined} disabled={!valid} loading={pending} onClick={() => void save()}>
             {isResolve ? "Resolve issue" : "Change status"}
           </Button>
         </DialogFooter>
@@ -209,7 +209,7 @@ export function ChangeStatusDialog({
             <Button variant="secondary" onClick={() => setCascadeConfirm(null)} disabled={pending}>
               Cancel
             </Button>
-            <Button loading={pending} onClick={() => void save(true)}>
+            <Button data-onboarding="resolve-cascade-submit" loading={pending} onClick={() => void save(true)}>
               Resolve
             </Button>
           </DialogFooter>

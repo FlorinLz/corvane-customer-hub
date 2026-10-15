@@ -1,3 +1,6 @@
+import { readFileSync, readdirSync } from "node:fs";
+import { join } from "node:path";
+
 import { describe, expect, it } from "vitest";
 
 import { CONTACTS } from "@seed/data/contacts";
@@ -14,7 +17,11 @@ import {
   STORAGE_KEYS,
   WELCOME,
   chapterOf,
+  currentStepIndex,
   doneFromData,
+  parseTarget,
+  splitBold,
+  targetTag,
   stepHref,
   type OnboardingState,
 } from "@/lib/onboarding/content";
@@ -35,7 +42,7 @@ const allText = () => [
   ...Object.values(NOTES).flatMap((n) => [n.title, n.text]),
   ...Object.values(SCENARIOS).flatMap((s) => [
     s.title,
-    ...s.chapters.flatMap((c) => [c.title ?? "", ...c.prologue, c.end.text, ...Object.values(c.signal ?? {}), ...c.steps.flatMap((st) => [st.title, st.text])]),
+    ...s.chapters.flatMap((c) => [c.title ?? "", ...c.prologue, c.end.text, ...Object.values(c.signal ?? {}), ...c.steps.flatMap((st) => [st.title, st.text, ...st.doThis])]),
   ]),
 ];
 
@@ -162,5 +169,84 @@ describe("step checks", () => {
     expect(stepHref(impact, 2, { ...EMPTY, scenario2: { ...EMPTY.scenario2, partnerEntityId: null } })).toBeNull();
     expect(stepHref(degraded, 2, EMPTY)).toBeNull();
     expect(stepHref(degraded, 2, { ...EMPTY, scenario2: { ...EMPTY.scenario2, issueId: "p1" } })).toBe("/issues/p1");
+  });
+});
+
+
+describe("the Do this lines and the highlight targets", () => {
+  const steps = chapters.flatMap((c) => c.steps);
+
+  it("every step has one to three Do this actions, naming a UI label in bold, and a target", () => {
+    expect(steps).toHaveLength(16);
+    for (const st of steps) {
+      expect(st.doThis.length, st.id).toBeGreaterThanOrEqual(1);
+      expect(st.doThis.length, st.id).toBeLessThanOrEqual(3);
+      for (const line of st.doThis) {
+        expect(line.length, `${st.id}: ${line}`).toBeLessThan(120);
+        expect(line, st.id).not.toContain("—");
+      }
+      expect(st.doThis.some((line) => splitBold(line).some((p) => p.bold)), `${st.id} names no UI label in bold`).toBe(true);
+      expect(st.target.length, st.id).toBeGreaterThan(0);
+    }
+  });
+
+  it("every target value exists in the code as a data-onboarding attribute", () => {
+    const files: string[] = [];
+    const walk = (dir: string) => {
+      for (const e of readdirSync(dir, { withFileTypes: true })) {
+        if (e.isDirectory()) walk(join(dir, e.name));
+        else if (/\.tsx?$/.test(e.name)) files.push(join(dir, e.name));
+      }
+    };
+    walk("src");
+    const code = files.filter((f) => !f.includes("lib/onboarding/content")).map((f) => readFileSync(f, "utf-8")).join("\n");
+    const names = new Set(steps.flatMap((st) => st.target.map((t) => parseTarget(t))).flatMap((t) => [t.name, ...(t.scope ? [t.scope] : [])]));
+    for (const name of names) {
+      const direct = new RegExp(`data-onboarding=(?:"${name}"|\\{[^}]*"${name}"[^}]*\\})`).test(code);
+      // The entity tabs build theirs from the tab key: data-onboarding={`${tab.key}-tab`}.
+      const tab = name.endsWith("-tab") && code.includes("data-onboarding={`${tab.key}-tab`}") && code.includes(`key: "${name.replace(/-tab$/, "")}"`);
+      expect(direct || tab, `no data-onboarding="${name}" in src`).toBe(true);
+    }
+  });
+
+  it("every step's anchor and its viewed-step target agree with the code", () => {
+    for (const st of steps) expect(st.anchor.length).toBeGreaterThan(0);
+  });
+
+  it("tags a clicking step 'Click here' and a looking step 'Read this'", () => {
+    expect(targetTag({ check: "data" })).toBe("Click here");
+    expect(targetTag({ check: "viewed" })).toBe("Read this");
+  });
+
+  it("splits bold labels from plain text, and parses target syntax", () => {
+    expect(splitBold("Click **Resolve** in **Your next action**.")).toEqual([
+      { text: "Click ", bold: false },
+      { text: "Resolve", bold: true },
+      { text: " in ", bold: false },
+      { text: "Your next action", bold: true },
+      { text: ".", bold: false },
+    ]);
+    expect(splitBold("no labels")).toEqual([{ text: "no labels", bold: false }]);
+    expect(parseTarget("resolve")).toEqual({ scope: null, name: "resolve", text: null });
+    expect(parseTarget("next-action/resolve")).toEqual({ scope: "next-action", name: "resolve", text: null });
+    expect(parseTarget("issue-row~Notify Revolut Ltd")).toEqual({ scope: null, name: "issue-row", text: "Notify Revolut Ltd" });
+  });
+});
+
+describe("the current step", () => {
+  const ids = ["a", "b", "c"].map((id) => ({ id }));
+
+  it("is the first step not done", () => {
+    expect(currentStepIndex(ids, () => false)).toBe(0);
+    expect(currentStepIndex(ids, (id) => id === "a")).toBe(1);
+    expect(currentStepIndex(ids, (id) => id !== "c")).toBe(2);
+  });
+
+  it("is the first gap when a later step is done out of order", () => {
+    expect(currentStepIndex(ids, (id) => id === "b")).toBe(0);
+  });
+
+  it("is none when every step is done", () => {
+    expect(currentStepIndex(ids, () => true)).toBe(-1);
   });
 });

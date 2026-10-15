@@ -410,7 +410,8 @@ test.describe("scenario 2 and the Why this? notes", () => {
     await expect(page.getByText("Coverage status saved")).toBeVisible();
     await expect(steps.nth(2)).toHaveAttribute("data-done", "true", { timeout: 15_000 });
 
-    // c. Linked issues: Take me there lands on the partner issue.
+    // c. Linked issues: already done, so it is a one-line step; a click opens it again, and Take me there lands on the partner issue.
+    await steps.nth(3).getByRole("button", { name: /Create linked issues/ }).click();
     await steps.nth(3).getByRole("button", { name: "Take me there" }).click();
     await expect(page).toHaveURL(new RegExp(`/issues/${fx.parentId}$`));
 

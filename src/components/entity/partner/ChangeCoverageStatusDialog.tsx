@@ -157,7 +157,7 @@ export function ChangeCoverageStatusDialog({
           <Button variant="secondary" onClick={() => setOpen(false)} disabled={pending}>
             Cancel
           </Button>
-          <Button disabled={!validReason} loading={pending} onClick={() => void save()}>
+          <Button data-onboarding="save-coverage-status" disabled={!validReason} loading={pending} onClick={() => void save()}>
             Save status
           </Button>
         </DialogFooter>

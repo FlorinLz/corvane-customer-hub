@@ -159,7 +159,7 @@ export function RecordReportSentDialog({
         if (next) reset();
       }}
     >
-      <Button variant={triggerVariant} onClick={() => setOpen(true)}>Record report sent</Button>
+      <Button data-onboarding="record-report-sent" variant={triggerVariant} onClick={() => setOpen(true)}>Record report sent</Button>
       <DialogContent>
         <DialogHeader>Record report sent</DialogHeader>
         <DialogBody>
@@ -254,7 +254,7 @@ export function RecordReportSentDialog({
           <Button variant="secondary" onClick={() => setOpen(false)} disabled={pending}>
             Cancel
           </Button>
-          <Button disabled={!valid} disabledReason={blockedReason ?? undefined} aria-describedby={blockedReason ? "record-blocked-reason" : undefined} loading={pending} onClick={() => void save()}>
+          <Button data-onboarding="record-report-sent-submit" disabled={!valid} disabledReason={blockedReason ?? undefined} aria-describedby={blockedReason ? "record-blocked-reason" : undefined} loading={pending} onClick={() => void save()}>
             Record report sent
           </Button>
         </DialogFooter>

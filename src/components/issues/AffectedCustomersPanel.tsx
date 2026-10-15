@@ -106,7 +106,7 @@ export function AffectedCustomersPanel({
         <WhyThis note="linked-issues" />
         <span className="flex-1" />
         {isOwner && toLink.length > 0 && (
-          <Button variant="secondary" onClick={openDialog}>
+          <Button data-onboarding="create-linked-issues" variant="secondary" onClick={openDialog}>
             Create linked issues
           </Button>
         )}
@@ -219,7 +219,7 @@ export function AffectedCustomersPanel({
             <Button variant="secondary" onClick={() => setDialogOpen(false)} disabled={pending}>
               Cancel
             </Button>
-            <Button loading={pending} onClick={() => void create()}>
+            <Button data-onboarding="create-linked-submit" loading={pending} onClick={() => void create()}>
               Create
             </Button>
           </DialogFooter>

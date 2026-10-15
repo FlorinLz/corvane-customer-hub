@@ -15,8 +15,11 @@ import {
   START_HERE_URL,
   STORAGE_KEYS,
   chapterOf,
+  currentStepIndex,
   doneFromData,
+  splitBold,
   stepHref,
+  targetTag,
   type Chapter,
   type ChapterId,
   type OnboardingState,
@@ -24,23 +27,29 @@ import {
   type ScenarioStep,
 } from "@/lib/onboarding/content";
 import { setScenarioHints } from "@/components/onboarding/hints";
+import { StepHighlight } from "@/components/onboarding/StepHighlight";
+import { DEMO_USERS, TEAM_LABELS, type Team } from "@/lib/demo-users";
 import { Button } from "@/components/ui/button";
 import { WelcomeModal } from "@/components/onboarding/WelcomeModal";
 import { readStorage, useIsClient, useIsDesktop, writeStorage } from "@/components/onboarding/storage";
 import { cn } from "@/lib/utils";
 
 const POLL_MS = 3_000;
+/** How long the anchor of a "viewed" step stays in view before the step counts as done. */
+const VIEWED_DWELL_MS = 1_200;
 const PANEL_WIDTH = 360;
 
 interface PanelPref {
   scenario: ScenarioId | null;
   chapter: ChapterId;
   collapsed: boolean;
-  /** Chapters whose prologue the visitor folded away: it is open the first time. */
+  /** Chapters whose prologue the visitor folded away. */
   closedPrologues: ChapterId[];
+  /** Chapters whose prologue the visitor opened again after it folded itself away (it does that once the first step is done). */
+  openedPrologues: ChapterId[];
 }
 
-const NO_PANEL: PanelPref = { scenario: null, chapter: "1a", collapsed: false, closedPrologues: [] };
+const NO_PANEL: PanelPref = { scenario: null, chapter: "1a", collapsed: false, closedPrologues: [], openedPrologues: [] };
 const FIRST_CHAPTER: Record<ScenarioId, ChapterId> = { 1: "1a", 2: "2" };
 
 function readPanel(): PanelPref {
@@ -48,7 +57,7 @@ function readPanel(): PanelPref {
     const p = JSON.parse(readStorage(STORAGE_KEYS.panel) ?? "null") as Partial<PanelPref> | null;
     if (p && (p.scenario === 1 || p.scenario === 2)) {
       const chapter = SCENARIOS[p.scenario].chapters.some((c) => c.id === p.chapter) ? (p.chapter as ChapterId) : FIRST_CHAPTER[p.scenario];
-      return { scenario: p.scenario, chapter, collapsed: !!p.collapsed, closedPrologues: Array.isArray(p.closedPrologues) ? p.closedPrologues : [] };
+      return { scenario: p.scenario, chapter, collapsed: !!p.collapsed, closedPrologues: Array.isArray(p.closedPrologues) ? p.closedPrologues : [], openedPrologues: Array.isArray(p.openedPrologues) ? p.openedPrologues : [] };
     }
   } catch {
     // fall through
@@ -93,6 +102,12 @@ export function OnboardingHost({ currentEmail }: { currentEmail: string }) {
   const seenRef = React.useRef<string[]>([]);
   const versionRef = React.useRef<number | null>(null);
   const arrivalRef = React.useRef<{ email: string; path: string; refreshed: boolean } | null>(null);
+  const panelRef = React.useRef<HTMLElement | null>(null);
+  const inViewSince = React.useRef<Record<string, number>>({});
+  // Steps the visitor opened by hand (a done step to read again, a later one to read ahead), per chapter.
+  const [expanded, setExpanded] = React.useState<{ chapter: ChapterId; ids: string[] }>({ chapter: "1a", ids: [] });
+  // Targets the visitor already clicked (or dismissed with Esc), for the current step only.
+  const [dismissals, setDismissals] = React.useState<{ step: string; items: string[] }>({ step: "", items: [] });
 
   React.useEffect(() => {
     const a = arrivalRef.current;
@@ -160,13 +175,21 @@ export function OnboardingHost({ currentEmail }: { currentEmail: string }) {
     const chapter = chapterOf(pref.chapter);
     const check = () => {
       const found: string[] = [];
-      for (const step of chapter.steps) {
+      // Only the step the visitor is on can be read: later ones wait for their turn, so the panel never ticks ahead of the highlight.
+      const dataDoneNow = doneFromData(state);
+      const idx = currentStepIndex(chapter.steps, (id) => (chapter.steps.find((st) => st.id === id)!.check === "data" ? !!dataDoneNow[id] : seenRef.current.includes(id)));
+      for (const step of idx >= 0 ? [chapter.steps[idx]] : []) {
         if (step.check !== "viewed" || seenRef.current.includes(step.id)) continue;
         if (step.needsPersona && currentEmail !== step.persona) continue;
         const href = stepHref(step, scenario.id, state);
         if (!href || pathname !== href) continue;
         const el = document.querySelector(`[data-onboarding="${step.anchor}"]`);
-        if (el && inView(el)) found.push(step.id);
+        // Read, not passed: it counts once it has stayed in view for a moment, which is also long enough to see the highlight on it.
+        if (el && inView(el)) {
+          const since = inViewSince.current[step.id] ?? Date.now();
+          inViewSince.current[step.id] = since;
+          if (Date.now() - since >= VIEWED_DWELL_MS) found.push(step.id);
+        } else delete inViewSince.current[step.id];
       }
       if (!found.length) return;
       seenRef.current = [...seenRef.current, ...found];
@@ -191,19 +214,38 @@ export function OnboardingHost({ currentEmail }: { currentEmail: string }) {
     setTimeout(tryScroll, 300);
   }, []);
 
+  /** Switches View as with the demo's own route. Returns false (and says so) when it fails. */
+  async function switchPerson(email: string): Promise<boolean> {
+    const res = await fetch("/api/demo/view-as", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email }) });
+    if (!res.ok) {
+      toast.error("Couldn't switch user. Try again.");
+      return false;
+    }
+    const body = (await res.json().catch(() => null)) as { data?: { name?: string; team?: Team } } | null;
+    const user = DEMO_USERS.find((u) => u.email === email);
+    const name = body?.data?.name ?? user?.name ?? email;
+    const team = body?.data?.team ?? user?.team;
+    toast.info(`You are now ${name}${team ? ` (${TEAM_LABELS[team]})` : ""}`, { position: "bottom-left" });
+    return true;
+  }
+
+  /** The visitor is already on the step's page as somebody else: switch the person and re-read the page. */
+  async function switchHere(step: ScenarioStep) {
+    setBusy(step.id);
+    try {
+      if (await switchPerson(step.persona)) router.refresh();
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function takeMeThere(scenarioId: ScenarioId, step: ScenarioStep) {
     const href = stepHref(step, scenarioId, state);
     if (!href) return;
     setBusy(step.id);
+    setDismissals({ step: step.id, items: [] }); // a new go: the highlight is there again
     try {
-      if (currentEmail !== step.persona) {
-        const res = await fetch("/api/demo/view-as", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: step.persona }) });
-        if (!res.ok) {
-          toast.error("Couldn't switch user. Try again.");
-          return;
-        }
-        toast.info(`Now viewing as ${step.personaName}`, { position: "bottom-left" });
-      }
+      if (currentEmail !== step.persona && !(await switchPerson(step.persona))) return;
       if (href === pathname) {
         // Already on the page: a refresh re-reads it as the new person; with the same person there is nothing to reload.
         if (currentEmail !== step.persona) router.refresh();
@@ -230,7 +272,32 @@ export function OnboardingHost({ currentEmail }: { currentEmail: string }) {
   const isDone = (s: ScenarioStep) => (s.check === "data" ? !!dataDone[s.id] : seen.includes(s.id));
   const doneCount = chapter ? chapter.steps.filter(isDone).length : 0;
   const allDone = !!chapter && doneCount === chapter.steps.length;
-  const prologueOpen = !!chapter && !pref.closedPrologues.includes(chapter.id);
+  const currentIdx = chapter ? currentStepIndex(chapter.steps, (id) => isDone(chapter.steps.find((st) => st.id === id)!)) : -1;
+  const currentStep = chapter && currentIdx >= 0 ? chapter.steps[currentIdx] : null;
+  // The story folds itself away once the first step is done; a click on its heading overrides that either way.
+  const firstDone = !!chapter && isDone(chapter.steps[0]);
+  const prologueOpen = !!chapter && !pref.closedPrologues.includes(chapter.id) && (pref.openedPrologues.includes(chapter.id) || !firstDone);
+  const openIds = chapter && expanded.chapter === chapter.id ? expanded.ids : [];
+  const toggleStep = (id: string) => chapter && setExpanded({ chapter: chapter.id, ids: openIds.includes(id) ? openIds.filter((x) => x !== id) : [...openIds, id] });
+  const dismissedNow = currentStep && dismissals.step === currentStep.id ? dismissals.items : [];
+  const highlightOn = !!currentStep && !!scenario && !pref.collapsed && desktop && currentEmail === currentStep.persona && !!state;
+  // A click on a button hands the highlight to the next target (a dialog's own button); a click on something to read ends it, since its other targets
+  // are only for finding the page.
+  const dismissOne = (raw: string) =>
+    setDismissals((d) => {
+      if (!currentStep) return d;
+      if (currentStep.check === "viewed") return { step: currentStep.id, items: currentStep.target };
+      return { step: currentStep.id, items: d.step === currentStep.id ? [...d.items, raw] : [raw] };
+    });
+  const dismissAll = () => currentStep && setDismissals({ step: currentStep.id, items: currentStep.target });
+
+  // When a step ticks the next one opens, and the panel brings it into view.
+  const currentKey = chapter && currentStep ? `${chapter.id}:${currentStep.id}` : null;
+  React.useEffect(() => {
+    if (!currentKey || !panelRef.current) return;
+    const li = panelRef.current.querySelector<HTMLElement>(`[data-onboarding-step="${currentKey.split(":")[1]}"]`);
+    li?.scrollIntoView({ block: "nearest", behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+  }, [currentKey]);
 
   // Hints next to a form while the step they help with is the open one (see hints.tsx).
   const reportStepOpen = chapter?.id === "2" && !dataDone["s2-report"];
@@ -263,6 +330,7 @@ export function OnboardingHost({ currentEmail }: { currentEmail: string }) {
 
       {scenario && chapter && !pref.collapsed && (
         <aside
+          ref={panelRef}
           role="complementary"
           aria-label={`Scenario ${scenario.id}`}
           data-onboarding="scenario-panel"
@@ -289,7 +357,13 @@ export function OnboardingHost({ currentEmail }: { currentEmail: string }) {
             <button
               type="button"
               aria-expanded={prologueOpen}
-              onClick={() => setPanel({ ...pref, closedPrologues: prologueOpen ? [...pref.closedPrologues, chapter.id] : pref.closedPrologues.filter((c) => c !== chapter.id) })}
+              onClick={() =>
+                setPanel({
+                  ...pref,
+                  closedPrologues: prologueOpen ? [...pref.closedPrologues, chapter.id] : pref.closedPrologues.filter((c) => c !== chapter.id),
+                  openedPrologues: prologueOpen ? pref.openedPrologues.filter((c) => c !== chapter.id) : [...pref.openedPrologues, chapter.id],
+                })
+              }
               className="flex w-full items-center gap-1 text-left text-label text-primary"
             >
               {prologueOpen ? <ChevronDown className="size-4" aria-hidden /> : <ChevronRight className="size-4" aria-hidden />}
@@ -319,29 +393,83 @@ export function OnboardingHost({ currentEmail }: { currentEmail: string }) {
           <ol className="flex flex-col">
             {chapter.steps.map((step, i) => {
               const done = isDone(step);
+              const current = i === currentIdx;
               const href = stepHref(step, scenario.id, state);
+              const open = current || openIds.includes(step.id);
+              const stateName = done ? "done" : current ? "current" : "later";
+              const viewer = DEMO_USERS.find((u) => u.email === currentEmail);
+              const wrongPerson = current && !!href && href === pathname && currentEmail !== step.persona;
               return (
-                <li key={step.id} data-onboarding-step={step.id} data-done={done ? "true" : "false"} className={cn("flex gap-3 border-b border-border p-4", done && "bg-tint")}>
-                  <span className={cn("mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-full border", done ? "border-success bg-success text-white" : "border-border-strong text-text-secondary")}>
-                    {done ? <Check className="size-3" aria-label="Done" /> : <Circle className="size-0" aria-hidden />}
-                  </span>
-                  <div className="flex flex-1 flex-col gap-1">
-                    <p className="text-body-strong">
-                      {i + 1}. {step.title}
-                    </p>
-                    <p className="text-body text-text-secondary">{step.text}</p>
-                    <div className="mt-1">
-                      <Button
-                        variant="secondary"
-                        loading={busy === step.id}
-                        disabled={!href}
-                        disabledReason={!href ? "Do the earlier step first" : undefined}
-                        onClick={() => void takeMeThere(scenario.id, step)}
-                      >
-                        Take me there
-                      </Button>
+                <li
+                  key={step.id}
+                  data-onboarding-step={step.id}
+                  data-done={done ? "true" : "false"}
+                  data-state={stateName}
+                  aria-current={current ? "step" : undefined}
+                  className={cn("border-b border-border", done && "bg-tint", current && "border-l-4 border-l-link-text")}
+                >
+                  {current ? null : (
+                    <button
+                      type="button"
+                      aria-expanded={open}
+                      onClick={() => toggleStep(step.id)}
+                      className={cn("flex w-full items-center gap-3 p-3 text-left hover:bg-tint", !done && "px-4 text-text-secondary")}
+                    >
+                      <span className={cn("inline-flex size-5 shrink-0 items-center justify-center rounded-full border", done ? "border-success bg-success text-white" : "border-border-strong text-text-secondary")}>
+                        {done ? <Check className="size-3" aria-label="Done" /> : <Circle className="size-0" aria-hidden />}
+                      </span>
+                      <span className={cn("flex-1 text-body", done ? "text-body-strong text-text" : "")}>
+                        {i + 1}. {step.title}
+                      </span>
+                      {!done && <span className="text-meta text-text-secondary">Waiting</span>}
+                    </button>
+                  )}
+                  {open && (
+                    <div className={cn("flex flex-col gap-2 pb-4 pr-4", current ? "pl-3 pt-4" : "pl-12")} data-onboarding-open={step.id}>
+                      {current && (
+                        <p className="flex items-start gap-3 text-body-strong">
+                          <span className="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-full border border-link-text text-meta text-link-text" aria-hidden>
+                            {i + 1}
+                          </span>
+                          <span>{step.title}</span>
+                        </p>
+                      )}
+                      <p className="text-[13px] leading-5 text-text-secondary">{step.text}</p>
+                      {wrongPerson && (
+                        <p data-onboarding="wrong-person" className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-sm bg-tint p-2 text-meta text-text">
+                          <span>
+                            You are viewing as {viewer?.name ?? currentEmail}. This step is {step.personaName}&rsquo;s.
+                          </span>
+                          <button type="button" onClick={() => void switchHere(step)} disabled={busy === step.id} className="text-link-text hover:underline">
+                            Switch to {step.personaName}
+                          </button>
+                        </p>
+                      )}
+                      <div data-onboarding="do-this" className="flex flex-col gap-1">
+                        <p className="text-label text-text">Do this</p>
+                        <ol className="list-decimal pl-5 text-body text-text">
+                          {step.doThis.map((line) => (
+                            <li key={line}>
+                              {splitBold(line).map((part, k) => (part.bold ? <strong key={k} className="font-semibold">{part.text}</strong> : <React.Fragment key={k}>{part.text}</React.Fragment>))}
+                            </li>
+                          ))}
+                        </ol>
+                      </div>
+                      {(current || done) && (
+                        <div className="mt-1">
+                          <Button
+                            variant="secondary"
+                            loading={busy === step.id}
+                            disabled={!href}
+                            disabledReason={!href ? "Do the earlier step first" : undefined}
+                            onClick={() => void takeMeThere(scenario.id, step)}
+                          >
+                            Take me there
+                          </Button>
+                        </div>
+                      )}
                     </div>
-                  </div>
+                  )}
                 </li>
               );
             })}
@@ -389,6 +517,18 @@ export function OnboardingHost({ currentEmail }: { currentEmail: string }) {
             )}
           </div>
         </aside>
+      )}
+
+      {highlightOn && currentStep && (
+        <StepHighlight
+          key={currentStep.id}
+          stepId={currentStep.id}
+          targets={currentStep.target}
+          dismissed={dismissedNow}
+          tag={targetTag(currentStep)}
+          onDismiss={dismissOne}
+          onDismissAll={dismissAll}
+        />
       )}
     </>
   );
