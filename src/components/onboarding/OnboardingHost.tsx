@@ -341,8 +341,14 @@ export function OnboardingHost({ currentEmail }: { currentEmail: string }) {
       key: guideKeyOf(pick, dom.viewAsOpen) ?? "",
       targets: dom.viewAsOpen ? [`option~${viewAsUser.name}`] : ["view-as"],
       text,
-      bubble: { say: text, counter: "View as", kind: "click" },
+      bubble: { say: text, counter: `${currentStep ? currentStep.moves.indexOf(pick.after) + 1 : 1} of ${currentStep?.moves.length ?? 1}`, kind: "click" },
     };
+  }
+  // The targets that come after this move: the bubble keeps off them (the Resolve issue button, while it points at the Solution field).
+  const avoid: string[] = [];
+  if (pick?.kind === "move" && currentStep) {
+    const next = currentStep.moves.slice(pick.index + 1, pick.index + 3);
+    for (const n of next) avoid.push(n.target);
   }
   const guideOn = !!guide && guide.key === stableKey && !pref.collapsed && desktop && !!state && pref.scenario !== null;
 
@@ -556,6 +562,7 @@ export function OnboardingHost({ currentEmail }: { currentEmail: string }) {
           ids={ids}
           bubble={guide.bubble}
           hidden={hiddenFor === guide.key}
+          avoidTargets={avoid}
           onTargetClick={() => {
             if (pick?.kind === "move" && pick.move.doneWhen === "click") markDone([pick.move.id]);
           }}

@@ -73,12 +73,24 @@ async function walk(page: Page, finished: () => Promise<boolean>, max = 120): Pr
     expect(b.x, `${key}: bubble left`).toBeGreaterThanOrEqual(0);
     expect(b.y, `${key}: bubble top`).toBeGreaterThanOrEqual(0);
     // The panel takes the right 360 px; a drawer's own buttons (Report issue) sit over it, and then the whole window is the page.
-    const overPanel = r.x + r.width > 1280 - 360 + 4;
+    const inDialog = (await page.locator('[role="dialog"]:not([data-onboarding-bubble])').count()) > 0; // a dialog covers the panel too
+    const overPanel = inDialog || r.x + r.width > 1280 - 360 + 4;
     expect(b.x + b.width, `${key}: bubble right edge`).toBeLessThanOrEqual((overPanel ? 1280 : 1280 - 360) + 1);
     expect(b.y + b.height, `${key}: bubble bottom edge`).toBeLessThanOrEqual(800 + 1);
     // Never over its own target, unless the target is as big as the page (then the bubble sits in its corner: data-side="inside").
     const overlap = b.x < r.x + r.width - 2 && b.x + b.width > r.x + 2 && b.y < r.y + r.height - 2 && b.y + b.height > r.y + 2;
     if ((await bubble.getAttribute("data-side")) !== "inside") expect(overlap, `${key}: bubble covers its target`).toBe(false);
+
+    // Every bubble shows its counter, View as included.
+    await expect(bubble.locator('[data-onboarding="bubble-counter"]'), `${key}: counter`).toHaveText(/^\d+ of \d+$/);
+    // In a dialog or drawer the bubble never covers the footer buttons (unless its own target is one of them).
+    const footers = page.locator('[data-onboarding="dialog-footer"]');
+    if ((await footers.count()) > 0) {
+      const f = (await footers.last().boundingBox())!;
+      const targetInFooter = r.x >= f.x - 2 && r.y >= f.y - 4 && r.x + r.width <= f.x + f.width + 2 && r.y + r.height <= f.y + f.height + 4;
+      const covers = b.x < f.x + f.width && b.x + b.width > f.x && b.y < f.y + f.height && b.y + b.height > f.y;
+      if (!targetInFooter) expect(covers, `${key}: bubble covers the dialog footer`).toBe(false);
+    }
 
     let kind: Seen["kind"] = "click";
     if (await bubble.getByRole("button", { name: "Got it" }).count()) {

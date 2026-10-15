@@ -174,7 +174,7 @@ export const SCENARIOS: Record<ScenarioId, Scenario> = {
           {
             id: "s1-home",
             title: "Start on Home as Emma Wilson",
-            text: "Emma speaks for Corvane to MPS. ISS-1042 is at the top of her Home, and Next actions shows who it waits on: Kevin, still investigating.",
+            text: "Emma speaks for Corvane to MPS. ISS-1042 sits at the top of her Home, waiting on Kevin, who is still investigating.",
             ...EMMA,
             check: "viewed",
             moves: [
@@ -185,7 +185,7 @@ export const SCENARIOS: Record<ScenarioId, Scenario> = {
           {
             id: "s1-issue",
             title: "Open ISS-1042",
-            text: "Your next action shows Emma has nothing due and names who is next. The Action plan shows the night in process order: the alert, Kevin's acknowledgement 9 minutes later, the customer told within the hour.",
+            text: "Emma has nothing due on ISS-1042, and can see who is next. The Action plan shows the night in process order: the alert, Kevin's acknowledgement 9 minutes later, the customer told within the hour.",
             ...EMMA,
             check: "viewed",
             moves: [
@@ -197,7 +197,7 @@ export const SCENARIOS: Record<ScenarioId, Scenario> = {
           {
             id: "s1-log",
             title: "Read the Communication log",
-            text: "Kevin wrote to Silvia Moretti, the MPS incident contact, during the night. Emma reads exactly what was promised before she speaks to her.",
+            text: "Kevin wrote to Silvia Moretti, the MPS incident contact, during the night. Emma needs to know exactly what was promised before she speaks to her.",
             ...EMMA,
             check: "viewed",
             moves: [
@@ -207,7 +207,7 @@ export const SCENARIOS: Record<ScenarioId, Scenario> = {
           {
             id: "s1-compliance",
             title: "Look at the Compliance card",
-            text: "MPS is a bank under DORA, so ISS-1042 is flagged for Compliance. Mei Chen assessed it as a possible major incident: MPS may have to report it to its regulator and needs the facts from Corvane within 2 hours, as Customer obligations shows.",
+            text: "MPS is a bank under DORA, so ISS-1042 is flagged for Compliance. Mei Chen assessed it as a possible major incident: MPS may have to report it to its regulator and needs the facts from Corvane within 2 hours.",
             ...EMMA,
             check: "viewed",
             moves: [
@@ -218,7 +218,7 @@ export const SCENARIOS: Record<ScenarioId, Scenario> = {
           {
             id: "s1-update",
             title: "Send the Update",
-            text: "Send Silvia an Update from the message panel, then record it. The Communication log shows it at once, with Emma's name and the time.",
+            text: "MPS is owed an Update. Emma sends it and records it, and the Communication log shows it at once, with her name and the time.",
             ...EMMA,
             check: "data",
             moves: [
@@ -246,7 +246,7 @@ export const SCENARIOS: Record<ScenarioId, Scenario> = {
           {
             id: "s1b-resolve",
             title: "Resolve as Kevin Lim",
-            text: "Switch to Kevin with View as. As owner he resolves ISS-1042. Watch the Action plan: the report steps appear, each with its person and deadline.",
+            text: "Kevin owns ISS-1042. Once he resolves it, the report steps appear, each with its person and deadline.",
             ...KEVIN,
             check: "data",
             moves: [
@@ -341,7 +341,7 @@ export const SCENARIOS: Record<ScenarioId, Scenario> = {
           {
             id: "s2-impact",
             title: "Check who depends on Lloyds",
-            text: "As Lukas, open the Lloyds Partner tab. UK CoP / GB lists every customer that sends its checks through Lloyds. These are the customers waiting on Lukas.",
+            text: "Lloyds answers UK CoP checks for several Corvane customers. Lukas checks who depends on it before reporting.",
             ...LUKAS,
             check: "viewed",
             moves: [
@@ -355,7 +355,7 @@ export const SCENARIOS: Record<ScenarioId, Scenario> = {
           {
             id: "s2-report",
             title: "Report the issue",
-            text: "From Home, use Report issue. Anyone at Corvane can report, and it takes under a minute. The hints next to the form show what to enter.",
+            text: "Anyone at Corvane can report an issue, and it takes under a minute.",
             ...LUKAS,
             check: "data",
             moves: [
@@ -375,7 +375,7 @@ export const SCENARIOS: Record<ScenarioId, Scenario> = {
           {
             id: "s2-degraded",
             title: "Acknowledge, then set to Degraded",
-            text: "Acknowledging starts the work. Degraded marks Lloyds on every customer that relies on it, and Affected customers lists each one with its own notice deadline.",
+            text: "Acknowledging starts the work. Degraded marks Lloyds on every customer that relies on it, and each one has its own notice deadline.",
             ...LUKAS,
             check: "data",
             moves: [
@@ -400,7 +400,7 @@ export const SCENARIOS: Record<ScenarioId, Scenario> = {
           {
             id: "s2-notify",
             title: "Notify Revolut Ltd as Adrian Koh",
-            text: "Switch to Adrian. His Home shows Notify Revolut Ltd with the time left. Record the notification and the deadline clears.",
+            text: "Adrian is the person Revolut knows. His Home shows Revolut Ltd waiting for a notice, with the time left, and recording it clears the deadline.",
             ...ADRIAN,
             check: "data",
             moves: [

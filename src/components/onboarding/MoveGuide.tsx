@@ -4,7 +4,7 @@ import * as React from "react";
 
 import { parseTarget, splitBold } from "@/lib/onboarding/content";
 import type { MoveKind, RouteIds } from "@/lib/onboarding/engine";
-import { placeBubble, type Placement } from "@/lib/onboarding/placement";
+import { placeBesideDialog, placeBubble, type Box, type Placement } from "@/lib/onboarding/placement";
 
 /** The first visible element for a `target`. `name~@partner` picks the Home row of that issue, by id. */
 export function findTarget(raw: string, ids?: RouteIds, root: ParentNode = document): HTMLElement | null {
@@ -65,6 +65,7 @@ export function MoveGuide({
   ids,
   bubble,
   hidden,
+  avoidTargets = [],
   onTargetClick,
   onEsc,
 }: {
@@ -73,6 +74,8 @@ export function MoveGuide({
   ids: RouteIds;
   bubble: GuideBubble;
   hidden: boolean;
+  /** The targets of the moves that come next: the bubble keeps off them. */
+  avoidTargets?: string[];
   onTargetClick: (raw: string) => void;
   onEsc: () => void;
 }) {
@@ -110,10 +113,24 @@ export function MoveGuide({
       const bubbleSize = { width: b?.width || BUBBLE_WIDTH, height: b?.height || 80 };
       const panelOpen = document.documentElement.dataset.onboardingPanel === "open" && window.innerWidth >= 900;
       const target = { left: r.left, top: r.top, width: r.width, height: r.height };
-      // The panel takes the right 360 px of the page; a drawer opened over it (Report issue) has its buttons there, so the whole window is usable then.
-      const overPanel = r.left + r.width > window.innerWidth - PANEL_WIDTH + 4;
+      const box = (el: Element): Box => {
+        const q = el.getBoundingClientRect();
+        return { left: q.left, top: q.top, width: q.width, height: q.height };
+      };
+      // In a dialog or a drawer the whole window is usable (it covers the panel), and the bubble keeps off the footer and off the next targets.
+      // (An option in a list opened from a dialog's select belongs to that dialog.)
+      const bubbleless = '[role="dialog"]:not([data-onboarding-bubble])';
+      const dialog = found.el.closest<HTMLElement>(bubbleless) ?? (found.el.closest('[role="listbox"]') ? document.querySelector<HTMLElement>(bubbleless) : null);
+      const overPanel = !!dialog || r.left + r.width > window.innerWidth - PANEL_WIDTH + 4;
       const usable = { width: window.innerWidth - (panelOpen && !overPanel ? PANEL_WIDTH : 0), height: window.innerHeight };
-      const placement = placeBubble(target, bubbleSize, usable);
+      const avoid: Box[] = [];
+      const footer = dialog?.querySelector('[data-onboarding="dialog-footer"]');
+      if (footer && !footer.contains(found.el)) avoid.push(box(footer));
+      for (const raw of avoidTargets) {
+        const el = findTarget(raw, ids);
+        if (el && el !== found.el && !found.el.contains(el)) avoid.push(box(el));
+      }
+      const placement = (dialog && placeBesideDialog(target, box(dialog), bubbleSize, usable, avoid)) || placeBubble(target, bubbleSize, usable, avoid);
       setFrame((prev) =>
         prev && prev.target.left === target.left && prev.target.top === target.top && prev.target.width === target.width && prev.target.height === target.height && prev.bubble.height === bubbleSize.height && prev.placement.left === placement.left && prev.placement.top === placement.top
           ? prev
@@ -123,7 +140,7 @@ export function MoveGuide({
     };
     frameId = requestAnimationFrame(follow);
     return () => cancelAnimationFrame(frameId);
-  }, [found, hidden]);
+  }, [found, hidden, avoidTargets.join("|")]);
 
   // Into view once per target, unless it already is.
   React.useEffect(() => {
@@ -196,7 +213,7 @@ export function MoveGuide({
           <p className="break-words rounded-sm bg-white/10 px-2 py-1 text-meta">&ldquo;{bubble.suggestion}&rdquo;</p>
         )}
         <div className="flex items-center gap-2 text-meta">
-          <span className="text-white/70">{bubble.counter}</span>
+          <span data-onboarding="bubble-counter" className="text-white/70">{bubble.counter}</span>
           <span className="flex-1" />
           {bubble.kind === "read" && (
             <button

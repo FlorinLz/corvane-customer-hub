@@ -1,4 +1,4 @@
-/** Where the guide bubble goes: next to its target, on the side with room, inside the viewport, never over the target. Pure. */
+/** Where the guide bubble goes: next to its target, on the side with room, inside the viewport, never over its target, the next move's target or a dialog's footer. Pure. */
 
 export interface Box {
   left: number;
@@ -19,36 +19,48 @@ export interface Placement {
 const GAP = 12;
 const EDGE = 8;
 
-/**
- * `usable` is the part of the viewport the page owns (the scenario panel takes the rest). Sides are tried in the order right, below, left, above; the
- * first where the bubble fits whole wins. When none does, the bubble goes inside the target's visible top right corner.
- */
-export function placeBubble(target: Box, bubble: { width: number; height: number }, usable: { width: number; height: number }): Placement {
-  const room: Record<Exclude<Side, "inside">, number> = {
-    right: usable.width - (target.left + target.width) - GAP - EDGE,
-    below: usable.height - (target.top + target.height) - GAP - EDGE,
-    left: target.left - GAP - EDGE,
-    above: target.top - GAP - EDGE,
-  };
-  const need: Record<Exclude<Side, "inside">, number> = { right: bubble.width, below: bubble.height, left: bubble.width, above: bubble.height };
-  const order: Exclude<Side, "inside">[] = ["right", "below", "left", "above"];
-  const found = order.find((o) => room[o] >= need[o]);
-  const side: Side = found ?? "inside";
+type Size = { width: number; height: number };
 
-  const clampX = (x: number) => Math.min(Math.max(EDGE, x), Math.max(EDGE, usable.width - bubble.width - EDGE));
-  const clampY = (y: number) => Math.min(Math.max(EDGE, y), Math.max(EDGE, usable.height - bubble.height - EDGE));
-  const centreX = target.left + target.width / 2 - bubble.width / 2;
-  const centreY = target.top + target.height / 2 - bubble.height / 2;
-  switch (side) {
-    case "inside":
-      return { side, left: clampX(Math.min(target.left + target.width, usable.width) - bubble.width - 16), top: clampY(Math.max(target.top, 0) + 16) };
-    case "right":
-      return { side, left: target.left + target.width + GAP, top: clampY(centreY) };
-    case "left":
-      return { side, left: target.left - GAP - bubble.width, top: clampY(centreY) };
-    case "below":
-      return { side, left: clampX(centreX), top: target.top + target.height + GAP };
-    case "above":
-      return { side, left: clampX(centreX), top: target.top - GAP - bubble.height };
-  }
+const overlaps = (a: Box, b: Box) => a.left < b.left + b.width - 1 && a.left + a.width > b.left + 1 && a.top < b.top + b.height - 1 && a.top + a.height > b.top + 1;
+
+/** The bubble's box at `at`, whole inside the usable part of the window (with a margin) and clear of every box in `avoid`. */
+function fits(at: { left: number; top: number }, bubble: Size, usable: Size, avoid: Box[]): boolean {
+  const box = { left: at.left, top: at.top, width: bubble.width, height: bubble.height };
+  const inside = box.left >= EDGE && box.top >= EDGE && box.left + box.width <= usable.width - EDGE && box.top + box.height <= usable.height - EDGE;
+  return inside && !avoid.some((a) => overlaps(box, a));
+}
+
+const clamp = (v: number, min: number, max: number) => Math.min(Math.max(min, v), Math.max(min, max));
+
+/**
+ * `usable` is the part of the viewport the page owns (the scenario panel takes the rest). `avoid` lists boxes the bubble must not cover besides its
+ * target: the next move's target, a dialog's footer. Sides are tried in the order right, below, left, above; the first where the bubble fits whole and
+ * clear wins. When none does, the bubble goes inside the target's visible top right corner.
+ */
+export function placeBubble(target: Box, bubble: Size, usable: Size, avoid: Box[] = []): Placement {
+  const centreX = clamp(target.left + target.width / 2 - bubble.width / 2, EDGE, usable.width - bubble.width - EDGE);
+  const centreY = clamp(target.top + target.height / 2 - bubble.height / 2, EDGE, usable.height - bubble.height - EDGE);
+  const candidates: Placement[] = [
+    { side: "right", left: target.left + target.width + GAP, top: centreY },
+    { side: "below", left: centreX, top: target.top + target.height + GAP },
+    { side: "left", left: target.left - GAP - bubble.width, top: centreY },
+    { side: "above", left: centreX, top: target.top - GAP - bubble.height },
+  ];
+  const found = candidates.find((c) => fits(c, bubble, usable, [target, ...avoid]));
+  if (found) return found;
+  return { side: "inside", left: clamp(Math.min(target.left + target.width, usable.width) - bubble.width - 16, EDGE, usable.width - bubble.width - EDGE), top: clamp(Math.max(target.top, 0) + 16, EDGE, usable.height - bubble.height - EDGE) };
+}
+
+/**
+ * For a target inside a dialog or a drawer: the bubble goes outside it, to the right of the dialog, then to the left, level with the target, so it
+ * covers neither the footer buttons nor the fields below. Then above the target. Null when none of these fits (the caller falls back to placeBubble).
+ */
+export function placeBesideDialog(target: Box, dialog: Box, bubble: Size, usable: Size, avoid: Box[] = []): Placement | null {
+  const top = clamp(target.top + target.height / 2 - bubble.height / 2, EDGE, usable.height - bubble.height - EDGE);
+  const candidates: Placement[] = [
+    { side: "right", left: dialog.left + dialog.width + GAP, top },
+    { side: "left", left: dialog.left - GAP - bubble.width, top },
+    { side: "above", left: clamp(target.left, EDGE, usable.width - bubble.width - EDGE), top: target.top - GAP - bubble.height },
+  ];
+  return candidates.find((c) => fits(c, bubble, usable, [target, ...avoid])) ?? null;
 }
