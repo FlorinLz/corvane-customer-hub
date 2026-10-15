@@ -23,3 +23,15 @@ const noopSubscribe = () => () => undefined;
 export function useIsClient(): boolean {
   return React.useSyncExternalStore(noopSubscribe, () => true, () => false);
 }
+
+const desktopQuery = "(min-width: 900px)";
+function subscribeDesktop(cb: () => void) {
+  const mq = window.matchMedia(desktopQuery);
+  mq.addEventListener("change", cb);
+  return () => mq.removeEventListener("change", cb);
+}
+
+/** 900 px and above: the modal is for desktop; below, only the mobile notice shows. */
+export function useIsDesktop(): boolean {
+  return React.useSyncExternalStore(subscribeDesktop, () => window.matchMedia(desktopQuery).matches, () => false);
+}

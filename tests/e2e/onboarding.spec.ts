@@ -8,7 +8,7 @@ import { DECISIONS_URL, NOTES, SCENARIOS, START_HERE_URL, STORAGE_KEYS, WELCOME,
 import { EMAIL, createLinkedIssueFixture, resetDemoData, signInAs, type LinkedIssueFixture } from "./fixtures/role-actions-setup";
 
 /**
- * First-visit onboarding: the welcome card, the scenario panel and its data checks, the "Why this?" notes, the mobile notice.
+ * First-visit onboarding: the welcome modal, the scenario panel and its data checks, the "Why this?" notes, the mobile notice.
  * Runs on the role-actions project's production build (Mon 05 Oct 2026). Every test starts from an empty browser storage (the config
  * dismisses the card for the other specs), so each one is a first visit.
  */
@@ -20,40 +20,87 @@ async function viewingAs(page: Page): Promise<string> {
   return (await page.getByRole("combobox", { name: "View as" }).innerText()).trim();
 }
 
-test.describe("welcome card", () => {
-  test("a first visit shows the card; closing remembers it; the ? in the demo bar brings it back", async ({ page }) => {
+/** Walks the welcome modal to its last step and opens a scenario from its card. */
+async function startScenario(page: Page, id: 1 | 2) {
+  const modal = page.getByRole("dialog", { name: WELCOME.step1.title });
+  await modal.getByRole("button", { name: "Next" }).click();
+  await page.getByRole("dialog", { name: WELCOME.step2.title }).getByRole("button", { name: "Next" }).click();
+  await page.locator(`[data-onboarding="scenario-card-${id}"]`).click();
+}
+
+test.describe("welcome modal", () => {
+  test("a first visit shows step 1; Next and Back walk three steps; the dots follow", async ({ page }) => {
     await page.goto("/");
-    const card = page.getByRole("complementary", { name: "Welcome" });
-    await expect(card).toBeVisible();
-    await expect(card.getByRole("heading", { name: WELCOME.title })).toBeVisible();
-    await expect(card).toContainText("Corvane checks payee names between banks.");
-    await expect(card).toContainText("Built by Florin Lazar, Product Manager. Fictional data; the demo resets itself.");
-    await expect(card.getByRole("button", { name: WELCOME.scenario1 })).toBeVisible();
-    await expect(card.getByRole("button", { name: WELCOME.scenario2 })).toBeVisible();
-    await expect(card.getByRole("link", { name: WELCOME.howBuilt })).toHaveAttribute("href", START_HERE_URL);
-    await expect(card.getByRole("link", { name: WELCOME.decisions })).toHaveAttribute("href", DECISIONS_URL);
-    // At most 60 words of text, not counting the buttons and links.
-    const words = [WELCOME.title, WELCOME.intro, WELCOME.by].join(" ").split(/\s+/).length;
-    expect(words).toBeLessThanOrEqual(60);
+    const modal = page.getByRole("dialog", { name: WELCOME.step1.title });
+    await expect(modal).toBeVisible();
+    expect((await modal.boundingBox())!.width).toBe(560);
+    for (const p of WELCOME.step1.paragraphs) await expect(modal).toContainText(p);
+    await expect(modal.getByRole("button", { name: "Back" })).toHaveCount(0);
+    await expect(modal.locator('[data-dot="1"]')).toHaveAttribute("data-active", "true");
 
-    // It never blocks the app: the page behind it still works while it is open.
-    await expect(page.locator("#worklist-issues")).toBeVisible();
+    await modal.getByRole("button", { name: "Next" }).click();
+    const two = page.getByRole("dialog", { name: WELCOME.step2.title });
+    for (const p of WELCOME.step2.paragraphs) await expect(two).toContainText(p);
+    await expect(two.getByRole("listitem")).toHaveText([...WELCOME.step2.principles]);
+    await expect(two.locator('[data-dot="2"]')).toHaveAttribute("data-active", "true");
 
-    await card.getByRole("button", { name: WELCOME.explore }).click();
-    await expect(card).toHaveCount(0);
+    await two.getByRole("button", { name: "Next" }).click();
+    const three = page.getByRole("dialog", { name: WELCOME.step3.title });
+    await expect(three.getByRole("button", { name: "Next" })).toHaveCount(0);
+    for (const id of [1, 2] as const) {
+      const card = three.locator(`[data-onboarding="scenario-card-${id}"]`);
+      await expect(card).toContainText(WELCOME.step3.cards[id].label);
+      await expect(card).toContainText(WELCOME.step3.cards[id].title);
+      await expect(card).toContainText(WELCOME.step3.cards[id].text);
+    }
+    await expect(three).toContainText(WELCOME.step3.note);
+    await expect(three.getByRole("link", { name: WELCOME.howBuilt })).toHaveAttribute("href", START_HERE_URL);
+    await expect(three.getByRole("link", { name: WELCOME.decisions })).toHaveAttribute("href", DECISIONS_URL);
+
+    await three.getByRole("button", { name: "Back" }).click();
+    await expect(page.getByRole("dialog", { name: WELCOME.step2.title })).toBeVisible();
+    await page.getByRole("button", { name: "Back" }).click();
+    await expect(page.getByRole("dialog", { name: WELCOME.step1.title })).toBeVisible();
+  });
+
+  test("Explore, X, Esc and a click outside close it; dismissal persists; the ? reopens at step 1", async ({ page }) => {
+    await page.goto("/");
+    await expect(page.getByRole("dialog", { name: WELCOME.step1.title })).toBeVisible();
+    await page.getByRole("button", { name: "Next" }).click();
+    await page.getByRole("button", { name: "Next" }).click();
+    await page.getByRole("button", { name: WELCOME.step3.explore }).click();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
     expect(await page.evaluate((k) => localStorage.getItem(k), STORAGE_KEYS.welcomeDismissed)).toBe("1");
 
     await page.reload();
     await expect(page.locator("#worklist-issues")).toBeVisible();
-    await expect(page.getByRole("complementary", { name: "Welcome" })).toHaveCount(0);
+    await expect(page.getByRole("dialog")).toHaveCount(0);
 
-    await page.getByRole("button", { name: "About this demo" }).click();
-    await expect(page.getByRole("complementary", { name: "Welcome" })).toBeVisible();
-    await page.getByRole("button", { name: "Close welcome card" }).click();
-    await expect(page.getByRole("complementary", { name: "Welcome" })).toHaveCount(0);
+    // The ? reopens at step 1 (after the modal was left on step 3 before), and each way out works.
+    for (const [way, close] of [
+      ["X", () => page.getByRole("button", { name: "Close", exact: true }).click()],
+      ["Esc", () => page.keyboard.press("Escape")],
+      ["click outside", () => page.locator("div.fixed.inset-0.bg-black\\/40").click({ position: { x: 20, y: 400 } })],
+    ] as const) {
+      await page.getByRole("button", { name: "About this demo" }).click();
+      await expect(page.getByRole("dialog", { name: WELCOME.step1.title })).toBeVisible();
+      await close();
+      await expect(page.getByRole("dialog"), way).toHaveCount(0);
+    }
   });
 
-  test("with storage blocked the card shows once per page load and can still be closed", async ({ page }) => {
+  test("both scenario cards open their panel and close the modal", async ({ page }) => {
+    await page.goto("/");
+    await startScenario(page, 2);
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect(page.getByRole("complementary", { name: "Scenario 2" })).toBeVisible();
+    await page.getByRole("button", { name: "Close the scenario panel" }).click();
+    await page.getByRole("button", { name: "About this demo" }).click();
+    await startScenario(page, 1);
+    await expect(page.getByRole("complementary", { name: "Scenario 1" })).toBeVisible();
+  });
+
+  test("with storage blocked the modal shows once per page load and can still be closed", async ({ page }) => {
     await page.addInitScript(() => {
       Object.defineProperty(window, "localStorage", {
         get() {
@@ -62,13 +109,11 @@ test.describe("welcome card", () => {
       });
     });
     await page.goto("/");
-    const card = page.getByRole("complementary", { name: "Welcome" });
-    await expect(card).toBeVisible();
-    await card.getByRole("button", { name: "Close welcome card" }).click();
-    await expect(card).toHaveCount(0);
-    // Navigating inside the app does not bring it back; a new page load does (nothing was remembered).
+    await expect(page.getByRole("dialog", { name: WELCOME.step1.title })).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("dialog")).toHaveCount(0);
     await page.goto("/");
-    await expect(page.getByRole("complementary", { name: "Welcome" })).toBeVisible();
+    await expect(page.getByRole("dialog", { name: WELCOME.step1.title })).toBeVisible();
   });
 });
 
@@ -81,7 +126,7 @@ test.describe("scenario 1: the night Sev-1", () => {
   test("Take me there switches the person and opens the right page for each step; the checks turn done from what was viewed and from the data", async ({ page }) => {
     const iss1042 = await db.issue.findUniqueOrThrow({ where: { number: 1042 } });
     await page.goto("/");
-    await page.getByRole("button", { name: WELCOME.scenario1 }).click();
+    await startScenario(page, 1);
 
     const panel = page.getByRole("complementary", { name: "Scenario 1" });
     await expect(panel).toBeVisible();
@@ -90,8 +135,8 @@ test.describe("scenario 1: the night Sev-1", () => {
     const steps = panel.locator("[data-onboarding-step]");
     await expect(steps).toHaveCount(5);
     for (let i = 0; i < 5; i++) await expect(steps.nth(i)).toHaveAttribute("data-done", "false");
-    // The card is gone once a scenario starts, and the page narrows to make room for the panel.
-    await expect(page.getByRole("complementary", { name: "Welcome" })).toHaveCount(0);
+    // The modal is gone once a scenario starts, and the page narrows to make room for the panel.
+    await expect(page.getByRole("dialog")).toHaveCount(0);
     expect(await page.evaluate(() => getComputedStyle(document.body).paddingRight)).toBe("360px");
 
     // a. Home as Emma Wilson.
@@ -146,6 +191,7 @@ test.describe("scenario 2 and the Why this? notes", () => {
   test.beforeAll(async ({ browser }) => {
     test.setTimeout(240_000);
     const context = await browser.newContext({ baseURL: "http://localhost:3104" });
+    await context.addInitScript((k) => localStorage.setItem(k, "1"), STORAGE_KEYS.welcomeDismissed); // the modal would cover the page
     const page = await context.newPage();
     fx = await createLinkedIssueFixture(page, context.request);
     await context.close();
@@ -155,7 +201,7 @@ test.describe("scenario 2 and the Why this? notes", () => {
     test.setTimeout(240_000);
     await signInAs(page, EMAIL.lukas);
     await page.goto("/");
-    await page.getByRole("button", { name: WELCOME.scenario2 }).click();
+    await startScenario(page, 2);
     const panel = page.getByRole("complementary", { name: "Scenario 2" });
     const steps = panel.locator("[data-onboarding-step]");
     await expect(steps).toHaveCount(5);
@@ -212,7 +258,8 @@ test.describe("scenario 2 and the Why this? notes", () => {
     expect(child.status).toBe("RESOLVED");
   });
 
-  test("five Why this? popovers render, each with two sentences", async ({ page }) => {
+  test("five Why this? popovers render with the plain copy", async ({ page }) => {
+    await page.addInitScript((k) => localStorage.setItem(k, "1"), STORAGE_KEYS.welcomeDismissed);
     await signInAs(page, EMAIL.lukas);
     const expected = (key: NoteKey) => NOTES[key].text;
 
@@ -220,8 +267,9 @@ test.describe("scenario 2 and the Why this? notes", () => {
       await page.locator(`[data-onboarding-why="${key}"]`).nth(nth).click();
       const popover = page.locator(`[data-onboarding-popover="${key}"]`);
       await expect(popover).toBeVisible();
+      await expect(popover).toContainText("Why this?");
       await expect(popover).toContainText(expected(key));
-      expect(NOTES[key].text.split(/(?<=\.)\s+/)).toHaveLength(2);
+      await expect(popover).not.toContainText("principle");
       return popover;
     }
 
@@ -255,8 +303,8 @@ test.describe("mobile notice", () => {
     await expect(notice).toBeVisible();
     await expect(notice).toContainText("Customer Hub is built for desktop. Open it on a laptop for the full demo.");
     await expect(notice.getByRole("link", { name: "Read the README" })).toHaveAttribute("href", START_HERE_URL);
-    // The card and the panel are for desktop: nothing else crowds the small screen.
-    await expect(page.getByRole("complementary", { name: "Welcome" })).toBeHidden();
+    // The modal and the panel are for desktop: nothing else crowds the small screen.
+    await expect(page.getByRole("dialog")).toHaveCount(0);
 
     await page.setViewportSize({ width: 900, height: 800 });
     await expect(notice).toBeHidden();

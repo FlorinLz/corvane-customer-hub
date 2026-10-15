@@ -18,14 +18,34 @@ export const STORAGE_KEYS = {
 /** The opening of the welcome card from anywhere (the demo bar's "?"). */
 export const OPEN_WELCOME_EVENT = "ch:onboarding-open-welcome";
 
+/** The welcome modal, in three steps (src/components/onboarding/WelcomeModal.tsx). */
 export const WELCOME = {
-  title: "Customer Hub, a portfolio demo",
-  intro:
-    "Corvane checks payee names between banks. When something breaks, four teams must act fast and one person must speak to the customer. Customer Hub gives each person their next action and a deadline.",
-  by: "Built by Florin Lazar, Product Manager. Fictional data; the demo resets itself.",
-  scenario1: "Run scenario 1 (2 min)",
-  scenario2: "Run scenario 2 (3 min)",
-  explore: "Explore on my own",
+  step1: {
+    title: "Welcome to Customer Hub",
+    paragraphs: [
+      "A personal portfolio project. The company and the data are fictional; the problem is real: critical operational work spread across inboxes, chats and spreadsheets, with deadlines nobody can see.",
+      "This MVP, built with Claude Code, shows how an internal tool can bring that work into one place and automate the routine parts. It focuses on incident management: from the first report to the root cause report, across four teams.",
+    ],
+  },
+  step2: {
+    title: "Customer Hub",
+    paragraphs: [
+      "Corvane checks payee names between banks before money moves. When a check fails, Ops, Customer Success, Network and Compliance each have a part to play, and the customer needs one clear answer, on time.",
+      "Customer Hub puts customers, partners and incidents in one place, built on five principles:",
+    ],
+    principles: ["Anyone can report an issue", "Information easy to find and use", "One owner, one voice to the customer", "Everyone sees their next action", "A visible deadline on every step"],
+  },
+  step3: {
+    title: "See it in action",
+    cards: {
+      1: { label: "Scenario 1 \u00b7 2 min", title: "The night Sev-1, the morning after", text: "A bank's checks failed overnight; see how Customer Success picks it up at 10:05." },
+      2: { label: "Scenario 2 \u00b7 3 min", title: "A partner bank goes down", text: "Report it once, notify every affected customer, resolve once." },
+    },
+    explore: "Explore on my own",
+    note: "Switch person any time with View as in the dark bar. The demo resets itself after 20 minutes without changes.",
+  },
+  next: "Next",
+  back: "Back",
   howBuilt: "How it was built",
   decisions: "Design decisions",
 } as const;
@@ -215,26 +235,11 @@ export function stepHref(step: ScenarioStep, scenario: ScenarioId, state: Onboar
 
 export type NoteKey = "next-action" | "time-column" | "action-plan" | "owner-communicator" | "linked-issues";
 
-/** "Why this?" notes: the decision, then the principle it serves. Two sentences each. */
+/** "Why this?" notes: plain, no principles. */
 export const NOTES: Record<NoteKey, { title: string; text: string }> = {
-  "next-action": {
-    title: "Your next action",
-    text: "The top of every issue shows one step for you, with its deadline and one button, or says nothing waits on you and names who is next. This serves the principle that everyone sees their next action.",
-  },
-  "time-column": {
-    title: "Time",
-    text: "Each row shows the time left on the step that matters to you, and it turns red when the deadline is near or has passed. This serves the principle of a visible deadline on every step.",
-  },
-  "action-plan": {
-    title: "Action plan",
-    text: "The plan lists every step in the order the process needs it, with the steps you can do now first and the later ones marked as waiting. This serves the principle that information is easy to find and use: the whole path, and who did what, is on one page.",
-  },
-  "owner-communicator": {
-    title: "Owner and Communicator",
-    text: "Each issue names one owner who fixes it and one communicator who speaks to the customer. This serves the principle of one owner and one voice to the customer, so a customer never hears from four teams.",
-  },
-  "linked-issues": {
-    title: "Linked issues",
-    text: "A partner outage creates one linked issue per affected customer, each with its own communicator and deadline, and resolving the partner issue resolves them all. This serves the principle that everyone sees their next action, because nobody has to work out who is affected.",
-  },
+  "next-action": { title: "Your next action", text: "One step for you, with its deadline and the button to do it. When nothing waits on you, it names who is next." },
+  "time-column": { title: "Time", text: "The time left on your next deadline. It turns orange when close and red once it has passed." },
+  "action-plan": { title: "Action plan", text: "Every step from report to close, in the order the work happens. Steps you can act on now come first; later ones are marked Waiting." },
+  "owner-communicator": { title: "People", text: "One owner fixes the issue and one communicator speaks to the customer. Everyone else contributes." },
+  "linked-issues": { title: "Linked issues", text: "When a partner fails, every customer on that service is listed with its own deadline. Resolving the partner issue resolves every linked issue." },
 };

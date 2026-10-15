@@ -7,13 +7,11 @@ import { Check, ChevronDown, ChevronUp, Circle, X } from "lucide-react";
 
 import { apiGet } from "@/lib/api-client";
 import {
-  DECISIONS_URL,
   OPEN_WELCOME_EVENT,
   SCENARIOS,
   SCENARIO_END,
   START_HERE_URL,
   STORAGE_KEYS,
-  WELCOME,
   doneFromData,
   stepHref,
   type OnboardingState,
@@ -22,7 +20,8 @@ import {
   type ScenarioStep,
 } from "@/lib/onboarding/content";
 import { Button } from "@/components/ui/button";
-import { readStorage, useIsClient, writeStorage } from "@/components/onboarding/storage";
+import { WelcomeModal } from "@/components/onboarding/WelcomeModal";
+import { readStorage, useIsClient, useIsDesktop, writeStorage } from "@/components/onboarding/storage";
 import { cn } from "@/lib/utils";
 
 const POLL_MS = 3_000;
@@ -71,6 +70,7 @@ export function OnboardingHost({ currentEmail }: { currentEmail: string }) {
   // null = not decided by anything this tab did yet: the browser's storage decides, and only after hydration.
   const [welcomeChoice, setWelcomeChoice] = React.useState<boolean | null>(null);
   const [prefChoice, setPrefChoice] = React.useState<PanelPref | null>(null);
+  const desktop = useIsDesktop();
   const welcome = welcomeChoice ?? (client && readStorage(STORAGE_KEYS.welcomeDismissed) !== "1");
   const pref = prefChoice ?? (client ? readPanel() : { scenario: null, collapsed: false });
   const [state, setState] = React.useState<OnboardingState | null>(null);
@@ -215,41 +215,7 @@ export function OnboardingHost({ currentEmail }: { currentEmail: string }) {
 
   return (
     <>
-      {welcome && (
-        <aside
-          role="complementary"
-          aria-label="Welcome"
-          data-onboarding="welcome-card"
-          style={{ right: panelOpen ? PANEL_WIDTH + 16 : 16 }}
-          className="fixed bottom-4 z-40 w-[340px] rounded-md border border-border bg-white p-4 shadow-overlay max-[899px]:hidden"
-        >
-          <div className="flex items-start gap-2">
-            <h2 className="flex-1 text-subsection">{WELCOME.title}</h2>
-            <button type="button" aria-label="Close welcome card" onClick={dismissWelcome} className="-mr-1 -mt-1 inline-flex size-6 items-center justify-center rounded-sm text-text-secondary hover:bg-tint">
-              <X className="size-4" aria-hidden />
-            </button>
-          </div>
-          <p className="mt-2 text-body">{WELCOME.intro}</p>
-          <p className="mt-2 text-meta text-text-secondary">{WELCOME.by}</p>
-          <div className="mt-3 flex flex-col gap-2">
-            <Button onClick={() => runScenario(1)}>{WELCOME.scenario1}</Button>
-            <Button variant="secondary" onClick={() => runScenario(2)}>
-              {WELCOME.scenario2}
-            </Button>
-            <Button variant="text" onClick={dismissWelcome}>
-              {WELCOME.explore}
-            </Button>
-          </div>
-          <p className="mt-2 flex gap-4 text-meta">
-            <a href={START_HERE_URL} target="_blank" rel="noopener noreferrer" className="text-link-text hover:underline">
-              {WELCOME.howBuilt}
-            </a>
-            <a href={DECISIONS_URL} target="_blank" rel="noopener noreferrer" className="text-link-text hover:underline">
-              {WELCOME.decisions}
-            </a>
-          </p>
-        </aside>
-      )}
+      {welcome && desktop && <WelcomeModal onClose={dismissWelcome} onRun={runScenario} />}
 
       {scenario && pref.collapsed && (
         <button

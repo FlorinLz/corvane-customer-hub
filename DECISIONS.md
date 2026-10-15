@@ -3034,3 +3034,11 @@ Visitors arrive with no context: a recruiter has a minute, a hiring manager five
 **Fixed on the way.** After a confirmed cascade resolve ("Resolve with linked issues") the confirmation dialog stayed open: it is a sibling of the main dialog, and `setOpen(false)` closed only the main one. `ChangeStatusDialog` now clears it on success; `onboarding.spec.ts` would notice a regression.
 
 **Tests.** `tests/unit/onboarding-content.test.ts` (copy rules, the checks, the links), `tests/e2e/onboarding.spec.ts` (first visit, dismissal, blocked storage, "?", both scenarios step by step with persona and page, the five popovers, the mobile notice). `onboarding-screenshots.spec.ts` writes the screenshots when `SHOTS_DIR` is set.
+
+## Onboarding v2: welcome modal in three steps, plain Why this notes (PR "onboarding-v2")
+
+**The corner card became a centred modal** (`WelcomeModal.tsx`, Radix Dialog, 560 px, three steps with dots, Back on steps 2 and 3). It closes with X, Esc or a click outside; Explore on my own and starting a scenario close it too. Dismissal is stored as before (`ch_onboarding_welcome_v1`, localStorage in try/catch; blocked storage shows it once per page load). It is mounted only while open, so the "?" in the demo bar always reopens it at step 1. Below 900 px it does not open at all (`useIsDesktop`, matchMedia): the mobile notice stays the only thing shown, and nothing is recorded as dismissed there. Step 3's two cards do what the old buttons did: dismiss, open the scenario panel.
+
+**The five "Why this?" notes are plain**: a title "Why this?" and one or two sentences about what the element does, no principles (`NOTES` in `content.ts`). The Time note was checked against the colour rules: `timeLeft` (`src/lib/time-block.ts`) gives "soon" below 60 minutes or at "Due now", which `TimeBlock` draws in `text-due` (#ba450b, a burnt orange), and "over" in `text-danger` (red), so "orange when close, red once passed" is right. Other times keep their own plainer styles; the note claims no colour for them.
+
+The scenario panel, its step copy and the README are unchanged. The e2e contexts that create fixtures start with the modal dismissed (it would cover the page).
