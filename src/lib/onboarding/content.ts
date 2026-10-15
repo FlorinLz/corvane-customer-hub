@@ -42,7 +42,7 @@ export const WELCOME = {
       2: { label: "Scenario 2 \u00b7 4 min", title: "A partner bank goes down", text: "Lloyds reports trouble on its side. Report it once, tell every affected customer, resolve once." },
     },
     explore: "Explore on my own",
-    note: "Switch person any time with View as in the dark bar. The demo resets itself after 20 minutes without changes.",
+    note: "Switch person any time with View as in the dark bar. This copy of the demo is yours for 24 hours; Start over in the dark bar takes it back to Monday 10:05.",
   },
   next: "Next",
   back: "Back",

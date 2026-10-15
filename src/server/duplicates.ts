@@ -1,6 +1,7 @@
 import type { LifecycleState, Team } from "@prisma/client";
 
 import { db } from "@/server/db";
+import { withSearchPath } from "@/server/sql";
 import { duplicateNameThreshold, DUPLICATE_MAX_MATCHES, TRANSACTION_OPTIONS } from "@/server/config";
 import { normaliseCore } from "@/lib/validation/normalise";
 import { mergeDuplicateMatches, type DuplicateReason, type RawDuplicateMatch } from "@/lib/rules/duplicates";
@@ -47,7 +48,7 @@ export async function checkDuplicates(input: DuplicateCheckInput): Promise<Dupli
 
   const threshold = duplicateNameThreshold();
 
-  const rawRows = await db.$transaction(async (tx) => {
+  const rawRows = await withSearchPath(db, async (tx) => {
     await tx.$executeRaw`SELECT set_config('pg_trgm.similarity_threshold', ${String(threshold)}, true)`;
 
     return tx.$queryRaw<{ id: string; reason: string; score: number; legal_name: string }[]>`
@@ -85,7 +86,7 @@ export async function checkDuplicates(input: DuplicateCheckInput): Promise<Dupli
       WHERE a."aliasCore" % c AND e.id != ${excludeId}
       GROUP BY e.id, e."legalName"
     `;
-  }, TRANSACTION_OPTIONS);
+  }, { transaction: TRANSACTION_OPTIONS });
 
   const raw: RawDuplicateMatch[] = rawRows.map((r) => ({
     entityId: r.id,

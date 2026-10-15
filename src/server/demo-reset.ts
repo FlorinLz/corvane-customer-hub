@@ -14,7 +14,7 @@ export const RESTORE_LOCK_KEY = 7_315_042_001;
 const BUSY = "A restore is already running. Try again in a few seconds.";
 
 /** Every data table except DemoMeta (brief 7.2.3) and Prisma's own migrations table. Read from the catalog, so a new table is never forgotten (TeamBusinessHours was once). */
-export const KEEP_TABLES = ["DemoMeta", "_prisma_migrations"];
+export const KEEP_TABLES = ["DemoMeta", "DemoSandbox", "_prisma_migrations"];
 
 async function dataTables(tx: Prisma.TransactionClient): Promise<string[]> {
   const rows = await tx.$queryRaw<{ tablename: string }[]>`SELECT tablename FROM pg_tables WHERE schemaname = 'public'`;

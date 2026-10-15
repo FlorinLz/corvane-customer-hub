@@ -23,11 +23,12 @@ When a check breaks, four teams must act fast and one person must speak to the c
 
 ### Architecture
 
-Next.js 16 (App Router) and TypeScript, Prisma 7, Postgres on Neon, hosted on Vercel. Three things exist only for a public demo:
+Next.js 16 (App Router) and TypeScript, Prisma 7, Postgres on Neon, hosted on Vercel. Four things exist only for a public demo:
 
 - **Demo clock.** Each visitor starts at the same demo moment and their clock runs from their arrival, so the seeded deadlines always make sense.
-- **Snapshot restore.** `data/demo-snapshot.js` holds every row after the seed; restoring it is one transaction under an advisory lock.
-- **Idle auto-restore.** After 20 minutes without a change, the next page load restores the data first. A daily cron at 03:00 UTC is the backstop.
+- **Snapshot restore.** `data/demo-snapshot.js` holds every row after the seed; restoring it is one transaction under an advisory lock. It restores the shared (public) schema, and a visitor's own schema when they press Start over.
+- **Sandbox per visitor.** With `DEMO_SANDBOXES=true`, every visitor gets a private copy of the demo data for 24 hours: one Postgres schema each (`sbx_` plus 16 hex characters) on the same database, built from the migrations and the snapshot. A signed cookie, `ch_sandbox`, names it, and `db` resolves to that schema's Prisma client for each request. Nobody sees another visitor's changes and nothing resets under them. "Start over" in the demo bar restores the visitor's own schema. If a sandbox cannot be made (an error, or `DEMO_SANDBOX_MAX` reached), the visitor uses the shared demo and the demo bar says so. See DECISIONS.md "Sandbox per visitor".
+- **Idle auto-restore.** For the shared demo only (sandbox mode off, or the fallback): after 20 minutes without a change, the next page load restores the data first. A daily cron at 03:00 UTC is the backstop, and with sandboxes on it also drops expired sandboxes.
 
 ### Top five decisions
 
@@ -174,6 +175,11 @@ spec's seed-data assumptions if it runs concurrently with them.
 | `SESSION_SECRET` | HMAC key for the `ch_user` session cookie (added in milestone 2) |
 | `APP_TIMEZONE` | Definition of "today" and business days (default `Europe/Bucharest`) |
 | `GLEIF_BASE_URL`, `GLEIF_TIMEOUT_MS`, `GLEIF_CACHE_PATH`, `GLEIF_FORCE_CACHE`, `GLEIF_SEED_SOURCE` | GLEIF lookup client (added in milestone 2). `data/gleif-cache.json` is imported by the code, so it is inside every serverless function; on Vercel set `GLEIF_SEED_SOURCE=cache` (the restore never calls the live API) |
+| `DEMO_SANDBOXES` | `true` gives every visitor their own copy of the demo data for 24 hours (needs `DEMO_MODE=true` and `DATABASE_ADMIN_URL`, and migration `20261015090000_demo_sandbox` applied). Unset or `false`: the shared demo with the idle restore, as before |
+| `DEMO_SANDBOX_SPARES` | Ready sandboxes kept for new visitors (default `2`). `0` makes every new visitor wait for theirs to be built |
+| `DEMO_SANDBOX_MAX` | The most sandboxes (assigned and spare) that exist at once (default `100`). Past it a new visitor uses the shared demo |
+| `DEMO_SANDBOX_CLIENT_CACHE` | Sandbox Prisma clients one instance keeps (default `20`) |
+| `DEMO_SANDBOX_TEST_HOOKS` | Tests only: lets a test cookie force a sandbox creation to fail. Never set it on Vercel |
 | `DB_POOL_MAX` | Local experiments only. Overrides the one-connection-per-instance pool size |
 | `APPROVED_DOC_HOSTS` | Comma-separated approved hosts for evidence and contract links |
 | `DUPLICATE_NAME_THRESHOLD` | Trigram similarity threshold for the duplicate-name check |
@@ -263,6 +269,12 @@ below, so if anything here and that file ever disagree, trust the test.
 ### Per-visitor clock
 
 A visitor's first request sets the `ch_arrival` cookie (the real arrival instant, 24 h). Their demo "now" is `DEMO_CLOCK_START + (real now − arrival)`, so every new visitor starts at Mon 05 Oct 2026, 10:05 CEST, whenever they arrive, and the clock then runs in real time. The server reads the cookie per request (`src/proxy.ts` sets it, `src/server/request-clock.ts` lets the synchronous `now()` see it); the browser takes its offset from the server at each page load (`window.__chClockOffsetMs`, written by the root layout), so a browser clock that is a few minutes off still agrees with the server. `DEMO_CLOCK_ANCHOR` overrides all of this for everybody.
+
+### Sandbox per visitor
+
+With `DEMO_SANDBOXES=true` a new visitor goes through "Preparing a fresh demo..." once: `POST /api/demo/sandbox` claims a ready spare sandbox (or builds one, which takes about 1.3 s on local Docker) and sets `ch_sandbox` (signed with `SESSION_SECRET`) together with a new `ch_arrival`, both for 24 hours. The registry row (`public."DemoSandbox"`) expires 24 hours after that arrival. A missing, tampered or expired cookie, a dropped sandbox, or one built from an older DDL or snapshot sends the visitor through the same screen again, so the data and the clock always start together. Start over (demo bar) restores the visitor's own schema from the snapshot, resets their arrival to now and reloads Home.
+
+The DDL a sandbox runs is generated from the migrations: `npm run sandbox:ddl` writes `data/sandbox-ddl.sql` and `data/sandbox-ddl.js`, and `tests/unit/sandbox-ddl.test.ts` fails when they are stale. A migration whose first line is `-- sandbox:skip` (the registry) is left out. `npm run sandbox:measure` builds one sandbox on `DATABASE_ADMIN_URL`, prints the time of each phase and its size, and drops it. The daily cron (`/api/cron/demo-restore`) drops expired sandboxes, spares from an old DDL or snapshot, and orphan schemas.
 
 ### Restoring the demo data
 

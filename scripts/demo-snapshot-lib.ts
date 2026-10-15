@@ -62,7 +62,7 @@ export function snapshotInputHash(): string {
   return hash.digest("hex");
 }
 
-const EXCLUDED = ["DemoMeta", "_prisma_migrations"];
+const EXCLUDED = ["DemoMeta", "DemoSandbox", "_prisma_migrations"];
 
 /** Insert order: every table after the tables its foreign keys point to. Fails on a cycle between tables. */
 export async function insertOrder(db: PrismaClient): Promise<string[]> {

@@ -32,6 +32,26 @@ function quoteTag(text: string): string {
 }
 
 /**
+ * TRUNCATE ... RESTART IDENTITY puts every serial/identity sequence back at 1, and the snapshot inserts rows with their ids, which does not move
+ * them. Without this the next insert (AuditEntry.id is the one autoincrement column) collides with a restored row. It moves each such sequence past
+ * the largest id in the current schema (the first schema of the search_path: public, or the visitor's sandbox).
+ */
+const ADVANCE_SERIAL_COLUMNS = `DO $$
+DECLARE r record;
+BEGIN
+  FOR r IN
+    SELECT c.relname AS tbl, a.attname AS col, pg_get_serial_sequence(format('%I.%I', n.nspname, c.relname), a.attname) AS seq
+    FROM pg_attribute a
+    JOIN pg_class c ON c.oid = a.attrelid
+    JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE n.nspname = current_schema() AND c.relkind = 'r' AND a.attnum > 0 AND NOT a.attisdropped
+      AND pg_get_serial_sequence(format('%I.%I', n.nspname, c.relname), a.attname) IS NOT NULL
+  LOOP
+    EXECUTE format('SELECT setval(%L, coalesce((SELECT max(%I) FROM %I), 0) + 1, false)', r.seq, r.col, r.tbl);
+  END LOOP;
+END $$`;
+
+/**
  * The statements that replace the data with the snapshot, to run inside a transaction that already holds the
  * restore lock. No parameters, so the whole thing goes to the server as one simple query (one round trip).
  * Each table is one INSERT ... SELECT from its rows as JSON: the server converts text to enums, dates and
@@ -46,6 +66,7 @@ export function buildRestoreSql(snapshot: DemoSnapshot): string {
     const tag = quoteTag(json);
     statements.push(`INSERT INTO "${table.name}" SELECT * FROM jsonb_populate_recordset(null::"${table.name}", ${tag}${json}${tag}::jsonb)`);
   }
+  statements.push(ADVANCE_SERIAL_COLUMNS);
   statements.push(`SELECT setval('issue_number_seq', ${snapshot.issueNumberNext}, false)`);
   return statements.join(";\n");
 }

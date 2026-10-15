@@ -7,6 +7,8 @@ import { createAdminDb } from "@/server/db-admin";
 import { ConflictError } from "@/server/errors";
 import { RESTORE_LOCK_KEY, restoreDemoData } from "@/server/demo-reset";
 import { atFreshClock } from "@/server/request-clock";
+import { currentSandboxSchema } from "@/server/sandbox-context";
+import { withSearchPath } from "@/server/sql";
 
 /** The demo restores itself this many minutes after the last data write by any visitor. The Demo bar says the same number. */
 export const IDLE_MINUTES = 20;
@@ -34,9 +36,9 @@ export function needsPreparing(state: DemoState, arrivalMs: number | undefined):
   return arrivalMs !== undefined && state.lastRestoreAtMs !== null && arrivalMs < state.lastRestoreAtMs;
 }
 
-/** The demo state in one query on the runtime connection (hub_app can read DemoMeta and pg_locks). Null when DemoMeta has no row yet. */
+/** The demo state of the shared (public) demo in one query on the runtime connection (hub_app can read DemoMeta and pg_locks). Null when DemoMeta has no row yet. */
 export async function readDemoState(client: Pick<PrismaClient, "$queryRaw"> = db): Promise<DemoState | null> {
-  const rows = await client.$queryRaw<{ idleDue: boolean; restoreRunning: boolean; lastRestoreAt: Date | null }[]>`
+  const rows = await withSearchPath(client as PrismaClient, (tx) => tx.$queryRaw<{ idleDue: boolean; restoreRunning: boolean; lastRestoreAt: Date | null }[]>`
     SELECT
       (m."lastWriteAt" IS NOT NULL AND m."lastWriteAt" < now() - make_interval(mins => ${IDLE_MINUTES}::int)) AS "idleDue",
       EXISTS (
@@ -44,7 +46,7 @@ export async function readDemoState(client: Pick<PrismaClient, "$queryRaw"> = db
         WHERE locktype = 'advisory' AND granted AND ((classid::bigint << 32) | objid::bigint) = ${RESTORE_LOCK_KEY}::bigint
       ) AS "restoreRunning",
       m."lastRestoreAt" AS "lastRestoreAt"
-    FROM "DemoMeta" m WHERE m."id" = 1`;
+    FROM "DemoMeta" m WHERE m."id" = 1`);
   if (rows.length === 0) return null;
   return { idleDue: rows[0].idleDue, restoreRunning: rows[0].restoreRunning, lastRestoreAtMs: rows[0].lastRestoreAt?.getTime() ?? null };
 }
@@ -59,8 +61,10 @@ export function idleRestoreEnabled(): boolean {
  * Best effort: a failure here must not fail the write that already committed; the daily restore is the backstop.
  */
 export async function recordDataWrite(client: Pick<PrismaClient, "$executeRaw"> = db): Promise<void> {
+  // A visitor's own sandbox is never idle-restored, so there is nothing to record (and the shared demo's clock stays theirs to move).
+  if (currentSandboxSchema()) return;
   try {
-    await client.$executeRaw`UPDATE "DemoMeta" SET "lastWriteAt" = clock_timestamp() WHERE "id" = 1`;
+    await withSearchPath(client as PrismaClient, (tx) => tx.$executeRaw`UPDATE "DemoMeta" SET "lastWriteAt" = clock_timestamp() WHERE "id" = 1`);
   } catch (err) {
     console.error("[demo-idle] could not record the write", err);
   }
