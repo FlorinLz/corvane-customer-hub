@@ -19,18 +19,16 @@ import {
   chapterOf,
   currentStepIndex,
   doneFromData,
+  UPDATE_PLACEHOLDER,
   parseTarget,
   splitBold,
-  targetTag,
-  stepHref,
   type OnboardingState,
 } from "@/lib/onboarding/content";
-import { REPORT_HINTS } from "@/components/onboarding/hints";
 
 const EMPTY: OnboardingState = {
   seedVersion: 1,
   scenario1: { issueId: "i1042", updateRecorded: false, resolved: false, confirmed: false, draftShared: false, approved: false, sent: false },
-  scenario2: { partnerEntityId: "lloyds1", issueId: null, acknowledged: false, degraded: false, linkedCount: 0, revolutNotified: false, resolved: false },
+  scenario2: { partnerEntityId: "lloyds1", issueId: null, revolutIssueId: null, acknowledged: false, degraded: false, linkedCount: 0, revolutNotified: false, resolved: false },
 };
 
 const chapters = Object.values(SCENARIOS).flatMap((s) => s.chapters);
@@ -38,11 +36,10 @@ const chapters = Object.values(SCENARIOS).flatMap((s) => s.chapters);
 const allText = () => [
   ...JSON.stringify(WELCOME).split('"'),
   MOBILE_NOTICE,
-  ...Object.values(REPORT_HINTS),
   ...Object.values(NOTES).flatMap((n) => [n.title, n.text]),
   ...Object.values(SCENARIOS).flatMap((s) => [
     s.title,
-    ...s.chapters.flatMap((c) => [c.title ?? "", ...c.prologue, c.end.text, ...Object.values(c.signal ?? {}), ...c.steps.flatMap((st) => [st.title, st.text, ...st.doThis])]),
+    ...s.chapters.flatMap((c) => [c.title ?? "", ...c.prologue, c.end.text, ...Object.values(c.signal ?? {}), ...c.steps.flatMap((st) => [st.title, st.text, ...st.moves.flatMap((m) => [m.say, m.sayOpen ?? "", m.fill ?? ""])])]),
   ]),
 ];
 
@@ -91,7 +88,7 @@ describe("scenario structure", () => {
     expect(new Set(steps.map((s) => s.id)).size).toBe(steps.length);
     const viewed = steps.filter((s) => s.check === "viewed").map((s) => s.id);
     expect(viewed).toEqual(["s1-home", "s1-issue", "s1-log", "s1-compliance", "s2-impact"]);
-    expect(chapterOf("2").steps[0]).toMatchObject({ persona: "lukas.brenner@corvane.example", page: "entity", anchor: "partner-customers" });
+    expect(chapterOf("2").steps[0]).toMatchObject({ persona: "lukas.brenner@corvane.example", check: "viewed" });
     expect(chapterOf("1b").steps.map((s) => s.persona.split(".")[0])).toEqual(["kevin", "emma", "kevin", "mei", "kevin"]);
   });
 });
@@ -159,38 +156,39 @@ describe("step checks", () => {
     expect(of({ revolutNotified: true })["s2-notify"]).toBe(true);
     expect(of({ resolved: true })["s2-resolve"]).toBe(true);
   });
-
-  it("Take me there opens Home, an issue or the partner's entity page; with none yet, nowhere", () => {
-    const [home, issue] = chapterOf("1a").steps;
-    expect(stepHref(home, 1, EMPTY)).toBe("/");
-    expect(stepHref(issue, 1, EMPTY)).toBe("/issues/i1042");
-    const [impact, , degraded] = chapterOf("2").steps;
-    expect(stepHref(impact, 2, EMPTY)).toBe("/entities/lloyds1/partner");
-    expect(stepHref(impact, 2, { ...EMPTY, scenario2: { ...EMPTY.scenario2, partnerEntityId: null } })).toBeNull();
-    expect(stepHref(degraded, 2, EMPTY)).toBeNull();
-    expect(stepHref(degraded, 2, { ...EMPTY, scenario2: { ...EMPTY.scenario2, issueId: "p1" } })).toBe("/issues/p1");
-  });
 });
 
-
-describe("the Do this lines and the highlight targets", () => {
+describe("the moves", () => {
   const steps = chapters.flatMap((c) => c.steps);
+  const moves = steps.flatMap((st) => st.moves.map((m) => ({ step: st, move: m })));
 
-  it("every step has one to three Do this actions, naming a UI label in bold, and a target", () => {
+  it("every step has moves, and every move has a say of at most 14 words naming one action, with no em dash", () => {
     expect(steps).toHaveLength(16);
-    for (const st of steps) {
-      expect(st.doThis.length, st.id).toBeGreaterThanOrEqual(1);
-      expect(st.doThis.length, st.id).toBeLessThanOrEqual(3);
-      for (const line of st.doThis) {
-        expect(line.length, `${st.id}: ${line}`).toBeLessThan(120);
-        expect(line, st.id).not.toContain("—");
+    for (const st of steps) expect(st.moves.length, st.id).toBeGreaterThan(0);
+    for (const { step, move } of moves) {
+      for (const text of [move.say, move.sayOpen].filter((t): t is string => !!t)) {
+        const words = text.replace(/\*\*/g, "").trim().split(/\s+/);
+        expect(words.length, `${step.id}/${move.id}: ${text}`).toBeLessThanOrEqual(14);
+        expect(text).not.toContain("\u2014");
       }
-      expect(st.doThis.some((line) => splitBold(line).some((p) => p.bold)), `${st.id} names no UI label in bold`).toBe(true);
-      expect(st.target.length, st.id).toBeGreaterThan(0);
+      expect(move.say.length, move.id).toBeGreaterThan(0);
     }
   });
 
-  it("every target value exists in the code as a data-onboarding attribute", () => {
+  it("move ids are unique, and the kinds fit what they carry", () => {
+    expect(new Set(moves.map((x) => x.move.id)).size).toBe(moves.length);
+    for (const { move } of moves) {
+      if (move.kind === "read") expect(move.doneWhen, move.id).toBe("gotIt");
+      if (move.kind === "type") {
+        expect(move.fill, move.id).toBeTruthy();
+        expect(move.doneWhen, move.id).toBe("value");
+      }
+      if (move.kind === "pick" && move.doneWhen === "value") expect(move.option, move.id).toBeTruthy();
+      if (move.doneWhen === "route") expect(move.arrive, move.id).toBeDefined();
+    }
+  });
+
+  it("every move's target exists in the code as a data-onboarding attribute", () => {
     const files: string[] = [];
     const walk = (dir: string) => {
       for (const e of readdirSync(dir, { withFileTypes: true })) {
@@ -200,7 +198,7 @@ describe("the Do this lines and the highlight targets", () => {
     };
     walk("src");
     const code = files.filter((f) => !f.includes("lib/onboarding/content")).map((f) => readFileSync(f, "utf-8")).join("\n");
-    const names = new Set(steps.flatMap((st) => st.target.map((t) => parseTarget(t))).flatMap((t) => [t.name, ...(t.scope ? [t.scope] : [])]));
+    const names = new Set(moves.flatMap(({ move }) => [parseTarget(move.target).name, ...(parseTarget(move.target).scope ? [parseTarget(move.target).scope!] : [])]));
     for (const name of names) {
       const direct = new RegExp(`data-onboarding=(?:"${name}"|\\{[^}]*"${name}"[^}]*\\})`).test(code);
       // The entity tabs build theirs from the tab key: data-onboarding={`${tab.key}-tab`}.
@@ -209,13 +207,9 @@ describe("the Do this lines and the highlight targets", () => {
     }
   });
 
-  it("every step's anchor and its viewed-step target agree with the code", () => {
-    for (const st of steps) expect(st.anchor.length).toBeGreaterThan(0);
-  });
-
-  it("tags a clicking step 'Click here' and a looking step 'Read this'", () => {
-    expect(targetTag({ check: "data" })).toBe("Click here");
-    expect(targetTag({ check: "viewed" })).toBe("Read this");
+  it("keeps the update message's placeholder in step with the server's", async () => {
+    const { UPDATE_PLACEHOLDER_LINE } = await import("@/server/issues/stage-message");
+    expect(UPDATE_PLACEHOLDER_LINE.endsWith(UPDATE_PLACEHOLDER)).toBe(true);
   });
 
   it("splits bold labels from plain text, and parses target syntax", () => {

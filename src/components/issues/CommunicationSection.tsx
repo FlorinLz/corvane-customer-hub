@@ -219,7 +219,7 @@ export function CommunicationSection({
             </div>
             {canAct && (
               <div className="flex flex-wrap items-center gap-2">
-                <Button variant="secondary" onClick={() => void copyMessage()}>
+                <Button data-onboarding="copy-message" variant="secondary" onClick={() => void copyMessage()}>
                   <Copy className="size-4" aria-hidden="true" /> Copy message
                 </Button>
                 <Button variant="secondary" onClick={openInGmail}>
@@ -313,6 +313,7 @@ function HighlightedTextarea({
       </div>
       <Textarea
         id={id}
+        data-onboarding="message-body"
         value={value}
         onChange={(e) => onChange(e.target.value)}
         onScroll={(e) => {

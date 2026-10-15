@@ -101,6 +101,7 @@ export function IssueRow({
       href={`/issues/${issueId}`}
       data-testid={`issue-row-${issueId}`}
       data-onboarding="issue-row"
+      data-onboarding-issue={issueId}
       className={cn(
         "grid grid-cols-[132px_162px_minmax(0,11fr)_minmax(0,10fr)] items-start gap-x-4 border-t border-border px-4 py-[14px] text-text hover:bg-tint",
         "min-[1101px]:grid-cols-[150px_170px_minmax(0,30fr)_200px_minmax(0,35fr)] min-[1101px]:gap-x-5",

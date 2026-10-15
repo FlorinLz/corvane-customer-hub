@@ -127,7 +127,7 @@ export function CloseDialog({ issueId, version, contacts, viewerZone, resolvedAt
             <div className="flex flex-col gap-1">
               <label htmlFor="close-issue-channel" className="text-meta text-text-secondary">Channel</label>
               <Select value={channel} onValueChange={(v) => setChannel(v as CommunicationChannel)}>
-                <SelectTrigger id="close-issue-channel">
+                <SelectTrigger id="close-issue-channel" data-onboarding="dialog-channel">
                   <SelectValue placeholder="Select" />
                 </SelectTrigger>
                 <SelectContent>

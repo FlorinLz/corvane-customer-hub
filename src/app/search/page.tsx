@@ -150,7 +150,7 @@ function InstitutionsTable({ rows, filtersActive }: { rows: SearchResultRow[]; f
           {rows.map((r) => (
             <tr key={r.id} className="border-b border-border align-top last:border-b-0">
               <td className="px-2.5 py-2">
-                <Link href={`/entities/${r.id}/overview`} className="font-medium text-link-text hover:underline">
+                <Link href={`/entities/${r.id}/overview`} data-onboarding="search-result" className="font-medium text-link-text hover:underline">
                   {r.legalName}
                 </Link>
                 {r.matchedAlias && <p className="text-text-secondary">Matched alias: {r.matchedAlias}</p>}

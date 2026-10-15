@@ -68,6 +68,7 @@ export function HomeLink({ viewerEmail }: { viewerEmail: string }) {
   return (
     <Link
       href="/"
+      data-onboarding="home-link"
       className={cn(
         "inline-flex h-9 items-center gap-2 whitespace-nowrap rounded-sm px-3 text-body font-medium text-text no-underline",
         active && "bg-selected text-primary font-semibold",

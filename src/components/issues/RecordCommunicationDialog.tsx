@@ -161,7 +161,7 @@ export function RecordCommunicationDialog({
             <div className="flex flex-col gap-1">
               <label htmlFor="record-comm-channel" className="text-meta text-text-secondary">Channel</label>
               <Select value={channel} onValueChange={(v) => selectChannel(v as CommunicationChannel)}>
-                <SelectTrigger id="record-comm-channel">
+                <SelectTrigger id="record-comm-channel" data-onboarding="dialog-channel">
                   <SelectValue placeholder="Select" />
                 </SelectTrigger>
                 <SelectContent>

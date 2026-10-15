@@ -11,7 +11,6 @@ import { TYPES_REQUIRING_SCHEME } from "@/lib/validation/issues";
 import { COVERAGE_STATUS_LABELS, ISSUE_IMPACT_LABELS, ISSUE_STATUS_LABELS, ISSUE_TYPE_LABELS, SCHEME_LABELS, SEVERITY_LABELS, STAGE_ORDER, TEAM_LABELS, issueDisplayId } from "@/lib/labels";
 import { Badge } from "@/components/ui/badge";
 import { SuggestCombobox, type SuggestOption } from "@/components/issues/SuggestCombobox";
-import { ReportHint } from "@/components/onboarding/hints";
 import { TimesFields, timesBody, timesFormFrom, timesValid, type TimesFormState } from "@/components/issues/TimeFields";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader, DrawerContent } from "@/components/ui/dialog";
@@ -453,14 +452,13 @@ export function ReportIssueDrawer(props: Props) {
               {errors.entityIds && <FieldError id="report-issue-entities-error">{errors.entityIds[0]}</FieldError>}
             </div>
           ) : null}
-          {props.mode === "home" && <ReportHint field="entity" />}
 
           {ready && (
             <>
           <div className="flex flex-col gap-1">
             <label htmlFor="report-issue-type" className="text-meta text-text-secondary">Type *</label>
             <Select value={form.type} onValueChange={(v) => setForm((f) => changeType(f, v as IssueType, context))}>
-              <SelectTrigger id="report-issue-type" aria-invalid={!!errors.type} aria-describedby={errors.type ? "report-issue-type-error" : undefined}>
+              <SelectTrigger id="report-issue-type" data-onboarding="report-type" aria-invalid={!!errors.type} aria-describedby={errors.type ? "report-issue-type-error" : undefined}>
                 <SelectValue placeholder="Select the issue type" />
               </SelectTrigger>
               <SelectContent>
@@ -471,7 +469,6 @@ export function ReportIssueDrawer(props: Props) {
                 ))}
               </SelectContent>
             </Select>
-            <ReportHint field="type" />
             {errors.type && <FieldError id="report-issue-type-error">{errors.type[0]}</FieldError>}
           </div>
 
@@ -481,7 +478,7 @@ export function ReportIssueDrawer(props: Props) {
               {coverages.map((c) => {
                 const key = `${c.scheme}|${c.country}`;
                 return (
-                  <label key={key} className="flex items-center gap-2 rounded-md border border-border p-2 text-body">
+                  <label key={key} data-onboarding="report-coverage-option" className="flex items-center gap-2 rounded-md border border-border p-2 text-body">
                     <input type="radio" name="report-issue-coverage" checked={form.coverageKey === key} onChange={() => selectCoverage(key)} className="size-4 accent-primary" />
                     {SCHEME_LABELS[c.scheme]} / {c.country}
                     <Badge variant="neutral-outline">{COVERAGE_STATUS_LABELS[c.status as keyof typeof COVERAGE_STATUS_LABELS] ?? c.status}</Badge>
@@ -497,7 +494,6 @@ export function ReportIssueDrawer(props: Props) {
                   Other scheme or country
                 </button>
               )}
-              <ReportHint field="coverage" />
             </div>
           )}
 
@@ -598,6 +594,7 @@ export function ReportIssueDrawer(props: Props) {
             <label htmlFor="report-issue-description" className="text-meta text-text-secondary">Description *</label>
             <Textarea
               id="report-issue-description"
+              data-onboarding="report-description"
               value={form.description}
               onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
               maxLength={5000}
@@ -606,12 +603,10 @@ export function ReportIssueDrawer(props: Props) {
               aria-describedby={errors.description ? "report-issue-description-error" : undefined}
             />
             <span className="self-end text-meta text-text-secondary">{form.description.length} / 5,000</span>
-            <ReportHint field="description" />
             {errors.description && <FieldError id="report-issue-description-error">{errors.description[0]}</FieldError>}
           </div>
 
           <TimesFields form={form.times} onChange={(times) => setForm((f) => ({ ...f, times }))} zone={viewerZone} serverErrors={serverErrors} idPrefix="report-times" />
-          <ReportHint field="aware" />
 
           {entityMode && (
             <div className="flex flex-col gap-1">
@@ -626,7 +621,7 @@ export function ReportIssueDrawer(props: Props) {
                   )
                 }
               >
-                <SelectTrigger id="report-issue-reporter" aria-invalid={!!errors.customerReporter} aria-describedby={errors.customerReporter ? "report-issue-reporter-error" : undefined}>
+                <SelectTrigger id="report-issue-reporter" data-onboarding="report-reporter" aria-invalid={!!errors.customerReporter} aria-describedby={errors.customerReporter ? "report-issue-reporter-error" : undefined}>
                   <SelectValue placeholder="Select who reported it" />
                 </SelectTrigger>
                 <SelectContent>
@@ -648,7 +643,7 @@ export function ReportIssueDrawer(props: Props) {
             <div className="flex flex-col gap-1">
               <label htmlFor="report-issue-reporter-group" className="text-meta text-text-secondary">Reported at the customer by *</label>
               <Select value={form.reporterKind} onValueChange={(v) => setForm((f) => ({ ...f, reporterKind: v as ReporterKind }))}>
-                <SelectTrigger id="report-issue-reporter-group" aria-invalid={!!errors.customerReporter} aria-describedby={errors.customerReporter ? "report-issue-reporter-group-error" : undefined}>
+                <SelectTrigger id="report-issue-reporter-group" data-onboarding="report-reporter" aria-invalid={!!errors.customerReporter} aria-describedby={errors.customerReporter ? "report-issue-reporter-group-error" : undefined}>
                   <SelectValue placeholder="Select who reported it" />
                 </SelectTrigger>
                 <SelectContent>
@@ -679,7 +674,7 @@ export function ReportIssueDrawer(props: Props) {
             <span className="text-meta text-text-secondary">Impact *</span>
             <div className="grid grid-cols-2 gap-2">
               {IMPACTS.map((i) => (
-                <label key={i} className="flex items-center gap-1.5 rounded-md border border-border p-2 text-body">
+                <label key={i} data-onboarding="report-impact-option" className="flex items-center gap-1.5 rounded-md border border-border p-2 text-body">
                   <input type="radio" name="report-issue-impact" checked={form.impact === i} onChange={() => setForm((f) => ({ ...f, impact: i }))} className="size-4 accent-primary" />
                   {ISSUE_IMPACT_LABELS[i]}
                 </label>
@@ -695,7 +690,7 @@ export function ReportIssueDrawer(props: Props) {
                 <input type="radio" name="report-issue-breach" checked={form.possibleBreach === true} onChange={() => setForm((f) => ({ ...f, possibleBreach: true }))} className="size-4 accent-primary" />
                 Yes
               </label>
-              <label className="flex items-center gap-1.5 text-body">
+              <label data-onboarding="report-breach-option" className="flex items-center gap-1.5 text-body">
                 <input type="radio" name="report-issue-breach" checked={form.possibleBreach === false} onChange={() => setForm((f) => ({ ...f, possibleBreach: false }))} className="size-4 accent-primary" />
                 No
               </label>
@@ -802,6 +797,7 @@ function EntityPicker({ picked, onPick, error }: { picked: EntityHit | null; onP
       <label htmlFor="report-issue-entity" className="text-meta text-text-secondary">Affected entity *</label>
       <input
         id="report-issue-entity"
+        data-onboarding="report-entity"
         role="combobox"
         aria-expanded={hits.length > 0}
         aria-controls="report-issue-entity-results"
@@ -832,6 +828,7 @@ function EntityPicker({ picked, onPick, error }: { picked: EntityHit | null; onP
             <div
               key={h.id}
               role="option"
+              data-onboarding="option"
               aria-selected={i === active}
               onMouseEnter={() => setActive(i)}
               onClick={() => onPick(h)}

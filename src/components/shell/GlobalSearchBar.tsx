@@ -50,6 +50,7 @@ export function GlobalSearchBar({ className }: { className?: string }) {
         ref={inputRef}
         type="text"
         role="searchbox"
+        data-onboarding="global-search"
         value={value}
         onChange={(event) => setValue(event.target.value)}
         placeholder="Search by name, alias, LEI or BIC"

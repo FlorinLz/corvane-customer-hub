@@ -35,6 +35,7 @@ export async function loadOnboardingState(): Promise<OnboardingState> {
   let degraded = false;
   let linkedCount = 0;
   let revolutNotified = false;
+  let revolutIssueId: string | null = null;
   if (partnerIssue) {
     const [change, links] = await Promise.all([
       // "Set to Degraded" writes a coverage status change after the issue was opened.
@@ -44,12 +45,13 @@ export async function loadOnboardingState(): Promise<OnboardingState> {
       }),
       db.issueLink.findMany({
         where: { parentId: partnerIssue.id, unlinkedAt: null },
-        select: { child: { select: { notifiedAt: true, entity: { select: { legalName: true } } } } },
+        select: { child: { select: { id: true, notifiedAt: true, entity: { select: { legalName: true } } } } },
       }),
     ]);
     degraded = !!change;
     linkedCount = links.length;
     revolutNotified = links.some((l) => l.child.entity.legalName === REVOLUT && l.child.notifiedAt !== null);
+    revolutIssueId = links.find((l) => l.child.entity.legalName === REVOLUT)?.child.id ?? null;
   }
 
   return {
@@ -66,6 +68,7 @@ export async function loadOnboardingState(): Promise<OnboardingState> {
     scenario2: {
       partnerEntityId: lloyds?.id ?? null,
       issueId: partnerIssue?.id ?? null,
+      revolutIssueId,
       acknowledged: !!partnerIssue?.acknowledgedAt,
       degraded,
       linkedCount,
