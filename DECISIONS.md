@@ -3042,3 +3042,17 @@ Visitors arrive with no context: a recruiter has a minute, a hiring manager five
 **The five "Why this?" notes are plain**: a title "Why this?" and one or two sentences about what the element does, no principles (`NOTES` in `content.ts`). The Time note was checked against the colour rules: `timeLeft` (`src/lib/time-block.ts`) gives "soon" below 60 minutes or at "Due now", which `TimeBlock` draws in `text-due` (#ba450b, a burnt orange), and "over" in `text-danger` (red), so "orange when close, red once passed" is right. Other times keep their own plainer styles; the note claims no colour for them.
 
 The scenario panel, its step copy and the README are unchanged. The e2e contexts that create fixtures start with the modal dismissed (it would cover the page).
+
+## Scenarios v2: chapters, prologues, a signal, form hints (PR "scenarios-v2")
+
+**Chapters.** A scenario has chapters (`content.ts`). Scenario 1 is "The morning after" (1a) and "Closing the loop" (1b); scenario 2 is one chapter. Each chapter has a prologue (open the first time, collapsible, remembered per chapter in the panel's storage, now `ch_onboarding_panel_v2`), five or six steps and an end. The end of 1a offers "Continue: Closing the loop" and "Finish here"; 1b can also be opened from the panel as soon as 1a's Update is done. The Update is no longer optional.
+
+**Why confirm resolution comes before the report in chapter 2.** The issue closes by itself when its last step is done (`closeWhenAllStepsDone`): confirmed with the customer, notified, assessed, report sent. The story ends on "Send the approved report" because that is the last step; confirming first lets the last click be the one that closes it. Checked end to end through the UI in `onboarding.spec.ts`.
+
+**Checks.** 1b reads the data: `resolvedAt`, the CLOSURE_CONFIRMED record and the root cause report task's `draftSharedAt`, `approvedAt` and `sentAt`. Scenario 2's first step ("Check who depends on Lloyds") has no row to read, so it is a "viewed" step like 1a's first four: done once the UK CoP coverage on Lloyds' Partner tab (`data-onboarding="partner-customers"`) has been in view as Lukas. Its page kind is "entity": `/entities/<id>/partner`, the id read by the same state call. No page lists the customers that reach UK CoP through Lloyds; the Partner tab shows the coverage, so the step says that and the copy does not claim a list.
+
+**The signal card** is plain data in the chapter (from, subject, body, footnote), drawn as a neutral card under the prologue.
+
+**Form hints.** `hints.tsx` is a small external store: the panel publishes which hints are active (scenario 2 open and its Report issue step not done; chapter 1b open and Share draft not done), and the forms read it (`ReportIssueDrawer`, `ShareDraftDialog`). A hint is a line of text under a field, never a value in it. The Share draft hint gives an example link on the first approved document host, because the field accepts nothing else.
+
+No schema change, no migration, no seed change.

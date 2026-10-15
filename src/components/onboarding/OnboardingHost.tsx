@@ -3,22 +3,27 @@
 import * as React from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Check, ChevronDown, ChevronUp, Circle, X } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, ChevronUp, Circle, X } from "lucide-react";
 
 import { apiGet } from "@/lib/api-client";
 import {
+  CONTINUE_LABEL,
+  FINISH_LABEL,
   OPEN_WELCOME_EVENT,
   SCENARIOS,
   SCENARIO_END,
   START_HERE_URL,
   STORAGE_KEYS,
+  chapterOf,
   doneFromData,
   stepHref,
+  type Chapter,
+  type ChapterId,
   type OnboardingState,
-  type Scenario,
   type ScenarioId,
   type ScenarioStep,
 } from "@/lib/onboarding/content";
+import { setScenarioHints } from "@/components/onboarding/hints";
 import { Button } from "@/components/ui/button";
 import { WelcomeModal } from "@/components/onboarding/WelcomeModal";
 import { readStorage, useIsClient, useIsDesktop, writeStorage } from "@/components/onboarding/storage";
@@ -29,17 +34,26 @@ const PANEL_WIDTH = 360;
 
 interface PanelPref {
   scenario: ScenarioId | null;
+  chapter: ChapterId;
   collapsed: boolean;
+  /** Chapters whose prologue the visitor folded away: it is open the first time. */
+  closedPrologues: ChapterId[];
 }
+
+const NO_PANEL: PanelPref = { scenario: null, chapter: "1a", collapsed: false, closedPrologues: [] };
+const FIRST_CHAPTER: Record<ScenarioId, ChapterId> = { 1: "1a", 2: "2" };
 
 function readPanel(): PanelPref {
   try {
     const p = JSON.parse(readStorage(STORAGE_KEYS.panel) ?? "null") as Partial<PanelPref> | null;
-    if (p && (p.scenario === 1 || p.scenario === 2)) return { scenario: p.scenario, collapsed: !!p.collapsed };
+    if (p && (p.scenario === 1 || p.scenario === 2)) {
+      const chapter = SCENARIOS[p.scenario].chapters.some((c) => c.id === p.chapter) ? (p.chapter as ChapterId) : FIRST_CHAPTER[p.scenario];
+      return { scenario: p.scenario, chapter, collapsed: !!p.collapsed, closedPrologues: Array.isArray(p.closedPrologues) ? p.closedPrologues : [] };
+    }
   } catch {
     // fall through
   }
-  return { scenario: null, collapsed: false };
+  return NO_PANEL;
 }
 
 /** The steps the browser has seen, kept until the next restore (the server's seedVersion changes). */
@@ -72,7 +86,7 @@ export function OnboardingHost({ currentEmail }: { currentEmail: string }) {
   const [prefChoice, setPrefChoice] = React.useState<PanelPref | null>(null);
   const desktop = useIsDesktop();
   const welcome = welcomeChoice ?? (client && readStorage(STORAGE_KEYS.welcomeDismissed) !== "1");
-  const pref = prefChoice ?? (client ? readPanel() : { scenario: null, collapsed: false });
+  const pref = prefChoice ?? (client ? readPanel() : NO_PANEL);
   const [state, setState] = React.useState<OnboardingState | null>(null);
   const [seen, setSeen] = React.useState<string[]>([]);
   const [busy, setBusy] = React.useState<string | null>(null);
@@ -143,9 +157,10 @@ export function OnboardingHost({ currentEmail }: { currentEmail: string }) {
   React.useEffect(() => {
     if (pref.scenario === null || !state) return;
     const scenario = SCENARIOS[pref.scenario];
+    const chapter = chapterOf(pref.chapter);
     const check = () => {
       const found: string[] = [];
-      for (const step of scenario.steps) {
+      for (const step of chapter.steps) {
         if (step.check !== "viewed" || seenRef.current.includes(step.id)) continue;
         if (step.needsPersona && currentEmail !== step.persona) continue;
         const href = stepHref(step, scenario.id, state);
@@ -161,7 +176,7 @@ export function OnboardingHost({ currentEmail }: { currentEmail: string }) {
     check();
     const timer = setInterval(check, 600);
     return () => clearInterval(timer);
-  }, [pref.scenario, state, pathname, currentEmail]);
+  }, [pref.scenario, pref.chapter, state, pathname, currentEmail]);
 
   const scrollToAnchor = React.useCallback((anchor: string) => {
     const started = Date.now();
@@ -176,8 +191,8 @@ export function OnboardingHost({ currentEmail }: { currentEmail: string }) {
     setTimeout(tryScroll, 300);
   }, []);
 
-  async function takeMeThere(scenario: Scenario, step: ScenarioStep) {
-    const href = stepHref(step, scenario.id, state);
+  async function takeMeThere(scenarioId: ScenarioId, step: ScenarioStep) {
+    const href = stepHref(step, scenarioId, state);
     if (!href) return;
     setBusy(step.id);
     try {
@@ -206,55 +221,103 @@ export function OnboardingHost({ currentEmail }: { currentEmail: string }) {
 
   function runScenario(id: ScenarioId) {
     dismissWelcome();
-    setPanel({ scenario: id, collapsed: false });
+    setPanel({ ...pref, scenario: id, chapter: FIRST_CHAPTER[id], collapsed: false });
   }
 
   const scenario = pref.scenario ? SCENARIOS[pref.scenario] : null;
+  const chapter: Chapter | null = scenario ? chapterOf(pref.chapter) : null;
   const dataDone = doneFromData(state);
   const isDone = (s: ScenarioStep) => (s.check === "data" ? !!dataDone[s.id] : seen.includes(s.id));
+  const doneCount = chapter ? chapter.steps.filter(isDone).length : 0;
+  const allDone = !!chapter && doneCount === chapter.steps.length;
+  const prologueOpen = !!chapter && !pref.closedPrologues.includes(chapter.id);
+
+  // Hints next to a form while the step they help with is the open one (see hints.tsx).
+  const reportStepOpen = chapter?.id === "2" && !dataDone["s2-report"];
+  const draftStepOpen = chapter?.id === "1b" && !dataDone["s1b-share"];
+  React.useEffect(() => {
+    setScenarioHints({ report: reportStepOpen && !pref.collapsed, draft: draftStepOpen && !pref.collapsed });
+    return () => setScenarioHints({ report: false, draft: false });
+  }, [reportStepOpen, draftStepOpen, pref.collapsed]);
+
+  const goChapter = (id: ChapterId) => {
+    const sc = chapterOf(id).scenario;
+    setPanel({ ...pref, scenario: sc, chapter: id, collapsed: false });
+  };
 
   return (
     <>
       {welcome && desktop && <WelcomeModal onClose={dismissWelcome} onRun={runScenario} />}
 
-      {scenario && pref.collapsed && (
+      {scenario && chapter && pref.collapsed && (
         <button
           type="button"
           data-onboarding="scenario-tab"
-          onClick={() => setPanel({ scenario: scenario.id, collapsed: false })}
+          onClick={() => setPanel({ ...pref, collapsed: false })}
           className="fixed bottom-4 right-4 z-40 flex items-center gap-2 rounded-md border border-border bg-white px-3 py-2 text-body shadow-overlay max-[899px]:hidden"
         >
           <ChevronUp className="size-4" aria-hidden />
-          Scenario {scenario.id}: {scenario.steps.filter(isDone).length} of {scenario.steps.length} done
+          Scenario {scenario.id}: {doneCount} of {chapter.steps.length} done
         </button>
       )}
 
-      {scenario && !pref.collapsed && (
+      {scenario && chapter && !pref.collapsed && (
         <aside
           role="complementary"
           aria-label={`Scenario ${scenario.id}`}
           data-onboarding="scenario-panel"
+          data-chapter={chapter.id}
           style={{ width: PANEL_WIDTH }}
           className="fixed inset-y-0 right-0 z-30 flex flex-col overflow-y-auto border-l border-border bg-white max-[899px]:hidden"
         >
           <div className="flex items-start gap-2 border-b border-border p-4">
             <div className="flex-1">
               <p className="text-meta text-text-secondary">
-                Scenario {scenario.id} of 2 · {scenario.steps.filter(isDone).length} of {scenario.steps.length} done
+                Scenario {scenario.id} of 2{chapter.title ? ` · ${chapter.title}` : ""} · {doneCount} of {chapter.steps.length} done
               </p>
               <h2 className="mt-1 text-subsection">{scenario.title}</h2>
-              <p className="mt-1 text-meta text-text-secondary">{scenario.subtitle}</p>
             </div>
-            <button type="button" aria-label="Collapse the scenario panel" onClick={() => setPanel({ scenario: scenario.id, collapsed: true })} className="inline-flex size-6 items-center justify-center rounded-sm text-text-secondary hover:bg-tint">
+            <button type="button" aria-label="Collapse the scenario panel" onClick={() => setPanel({ ...pref, collapsed: true })} className="inline-flex size-6 items-center justify-center rounded-sm text-text-secondary hover:bg-tint">
               <ChevronDown className="size-4" aria-hidden />
             </button>
-            <button type="button" aria-label="Close the scenario panel" onClick={() => setPanel({ scenario: null, collapsed: false })} className="inline-flex size-6 items-center justify-center rounded-sm text-text-secondary hover:bg-tint">
+            <button type="button" aria-label="Close the scenario panel" onClick={() => setPanel({ ...pref, scenario: null, collapsed: false })} className="inline-flex size-6 items-center justify-center rounded-sm text-text-secondary hover:bg-tint">
               <X className="size-4" aria-hidden />
             </button>
           </div>
 
+          <section data-onboarding="prologue" aria-label="Prologue" className="border-b border-border bg-tint p-4">
+            <button
+              type="button"
+              aria-expanded={prologueOpen}
+              onClick={() => setPanel({ ...pref, closedPrologues: prologueOpen ? [...pref.closedPrologues, chapter.id] : pref.closedPrologues.filter((c) => c !== chapter.id) })}
+              className="flex w-full items-center gap-1 text-left text-label text-primary"
+            >
+              {prologueOpen ? <ChevronDown className="size-4" aria-hidden /> : <ChevronRight className="size-4" aria-hidden />}
+              {chapter.title ?? "The story"}
+            </button>
+            {prologueOpen && (
+              <div className="mt-2 flex flex-col gap-2 text-body text-text">
+                {chapter.prologue.map((t) => (
+                  <p key={t}>{t}</p>
+                ))}
+                {chapter.signal && (
+                  <div data-onboarding="signal-card" className="mt-1 flex flex-col gap-1 rounded-md border border-border bg-white p-3">
+                    <p className="text-meta text-text-secondary">
+                      From: <span className="text-text">{chapter.signal.from}</span>
+                    </p>
+                    <p className="text-meta text-text-secondary">
+                      Subject: <span className="text-text">{chapter.signal.subject}</span>
+                    </p>
+                    <p className="mt-1 text-body">{chapter.signal.body}</p>
+                    <p className="mt-1 text-meta text-text-secondary">{chapter.signal.footnote}</p>
+                  </div>
+                )}
+              </div>
+            )}
+          </section>
+
           <ol className="flex flex-col">
-            {scenario.steps.map((step, i) => {
+            {chapter.steps.map((step, i) => {
               const done = isDone(step);
               const href = stepHref(step, scenario.id, state);
               return (
@@ -265,7 +328,6 @@ export function OnboardingHost({ currentEmail }: { currentEmail: string }) {
                   <div className="flex flex-1 flex-col gap-1">
                     <p className="text-body-strong">
                       {i + 1}. {step.title}
-                      {step.optional && <span className="ml-2 text-meta font-normal text-text-secondary">Optional</span>}
                     </p>
                     <p className="text-body text-text-secondary">{step.text}</p>
                     <div className="mt-1">
@@ -274,7 +336,7 @@ export function OnboardingHost({ currentEmail }: { currentEmail: string }) {
                         loading={busy === step.id}
                         disabled={!href}
                         disabledReason={!href ? "Do the earlier step first" : undefined}
-                        onClick={() => void takeMeThere(scenario, step)}
+                        onClick={() => void takeMeThere(scenario.id, step)}
                       >
                         Take me there
                       </Button>
@@ -285,13 +347,46 @@ export function OnboardingHost({ currentEmail }: { currentEmail: string }) {
             })}
           </ol>
 
+          {allDone && (
+            <section data-onboarding="chapter-end" className="border-b border-border p-4">
+              <p className="text-body">{chapter.end.text}</p>
+              <div className="mt-3 flex flex-col gap-2">
+                {chapter.end.actions.includes("continue") && (
+                  <Button onClick={() => goChapter("1b")}>{CONTINUE_LABEL}</Button>
+                )}
+                {chapter.end.actions.includes("finish") && (
+                  <Button variant="secondary" onClick={() => setPanel({ ...pref, scenario: null, collapsed: false })}>
+                    {FINISH_LABEL}
+                  </Button>
+                )}
+                {chapter.end.actions.includes("built") && (
+                  <a href={START_HERE_URL} target="_blank" rel="noopener noreferrer" className="self-start text-meta text-link-text hover:underline">
+                    {SCENARIO_END}
+                  </a>
+                )}
+              </div>
+            </section>
+          )}
+
           <div className="mt-auto flex flex-col gap-2 p-4 text-meta">
-            <button type="button" className="self-start text-link-text hover:underline" onClick={() => setPanel({ scenario: scenario.id === 1 ? 2 : 1, collapsed: false })}>
+            {chapter.id === "1a" && !allDone && dataDone["s1-update"] && (
+              <button type="button" className="self-start text-link-text hover:underline" onClick={() => goChapter("1b")}>
+                Go to chapter 2: Closing the loop
+              </button>
+            )}
+            {chapter.id === "1b" && (
+              <button type="button" className="self-start text-link-text hover:underline" onClick={() => goChapter("1a")}>
+                Back to chapter 1: The morning after
+              </button>
+            )}
+            <button type="button" className="self-start text-link-text hover:underline" onClick={() => goChapter(scenario.id === 1 ? "2" : "1a")}>
               Switch to scenario {scenario.id === 1 ? 2 : 1}
             </button>
-            <a href={START_HERE_URL} target="_blank" rel="noopener noreferrer" className="self-start text-link-text hover:underline">
-              {SCENARIO_END}
-            </a>
+            {!allDone && (
+              <a href={START_HERE_URL} target="_blank" rel="noopener noreferrer" className="self-start text-link-text hover:underline">
+                {SCENARIO_END}
+              </a>
+            )}
           </div>
         </aside>
       )}

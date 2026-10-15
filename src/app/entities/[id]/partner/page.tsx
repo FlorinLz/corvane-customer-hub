@@ -86,7 +86,8 @@ function CoverageTableRow({ row, canEdit }: { row: CoverageRow; canEdit: boolean
 function SchemeGroup({ scheme, rows, canEdit }: { scheme: Scheme; rows: CoverageRow[]; canEdit: boolean }) {
   if (rows.length === 0) return null;
   return (
-    <Card>
+    // The guided scenario's impact step looks at the UK CoP coverage (data-onboarding anchor).
+    <Card data-onboarding={scheme === "UK_COP" ? "partner-customers" : undefined}>
       <div className="mb-2 flex items-center gap-2">
         <Badge variant={scheme === "EU_VOP" ? "scheme-eu" : scheme === "UK_COP" ? "scheme-uk" : "neutral-outline"}>{SCHEME_LABELS[scheme]}</Badge>
         <span className="text-meta text-text-secondary">{rows.length}</span>

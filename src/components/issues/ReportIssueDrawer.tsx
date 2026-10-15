@@ -11,6 +11,7 @@ import { TYPES_REQUIRING_SCHEME } from "@/lib/validation/issues";
 import { COVERAGE_STATUS_LABELS, ISSUE_IMPACT_LABELS, ISSUE_STATUS_LABELS, ISSUE_TYPE_LABELS, SCHEME_LABELS, SEVERITY_LABELS, STAGE_ORDER, TEAM_LABELS, issueDisplayId } from "@/lib/labels";
 import { Badge } from "@/components/ui/badge";
 import { SuggestCombobox, type SuggestOption } from "@/components/issues/SuggestCombobox";
+import { ReportHint } from "@/components/onboarding/hints";
 import { TimesFields, timesBody, timesFormFrom, timesValid, type TimesFormState } from "@/components/issues/TimeFields";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader, DrawerContent } from "@/components/ui/dialog";
@@ -452,6 +453,7 @@ export function ReportIssueDrawer(props: Props) {
               {errors.entityIds && <FieldError id="report-issue-entities-error">{errors.entityIds[0]}</FieldError>}
             </div>
           ) : null}
+          {props.mode === "home" && <ReportHint field="entity" />}
 
           {ready && (
             <>
@@ -469,6 +471,7 @@ export function ReportIssueDrawer(props: Props) {
                 ))}
               </SelectContent>
             </Select>
+            <ReportHint field="type" />
             {errors.type && <FieldError id="report-issue-type-error">{errors.type[0]}</FieldError>}
           </div>
 
@@ -494,6 +497,7 @@ export function ReportIssueDrawer(props: Props) {
                   Other scheme or country
                 </button>
               )}
+              <ReportHint field="coverage" />
             </div>
           )}
 
@@ -602,10 +606,12 @@ export function ReportIssueDrawer(props: Props) {
               aria-describedby={errors.description ? "report-issue-description-error" : undefined}
             />
             <span className="self-end text-meta text-text-secondary">{form.description.length} / 5,000</span>
+            <ReportHint field="description" />
             {errors.description && <FieldError id="report-issue-description-error">{errors.description[0]}</FieldError>}
           </div>
 
           <TimesFields form={form.times} onChange={(times) => setForm((f) => ({ ...f, times }))} zone={viewerZone} serverErrors={serverErrors} idPrefix="report-times" />
+          <ReportHint field="aware" />
 
           {entityMode && (
             <div className="flex flex-col gap-1">
