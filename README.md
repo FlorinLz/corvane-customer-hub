@@ -13,7 +13,7 @@ When a check breaks, four teams must act fast and one person must speak to the c
 1. **The night Sev-1, the morning after (2 min, plus a 3 min chapter).** The morning after: Emma Wilson picks up ISS-1042 after a night of failed name checks. Closing the loop: resolution, Compliance approval and the root cause report, until the issue closes by itself.
 2. **A partner bank goes down (4 min).** A message from Lloyds, who depends on it, report once, notify every affected customer, resolve once.
 
-In the scenario panel only the current step is open. It lists what to do in order, with the exact button names in bold, and Take me there switches the person, opens the page and rings the button to click.
+In the scenario panel only the current step is open. A bubble next to the element shows one action at a time, for the screen you are on, with the exact button names in bold. You walk through the platform by real clicks: View as, search, rows, tabs, fields. Fill for me types the suggested text, Skip ahead jumps to the next real action, and Back on track brings you home if you wander.
 
 ### Five principles
 

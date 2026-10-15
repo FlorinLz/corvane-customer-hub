@@ -8,6 +8,9 @@ import { Check, ChevronDown, ChevronRight, ChevronUp, Circle, X } from "lucide-r
 import { apiGet } from "@/lib/api-client";
 import {
   CONTINUE_LABEL,
+  EVENT_DATE_TOKEN,
+  EVENT_TIME_TOKEN,
+  EXAMPLE_LINK_TOKEN,
   FINISH_LABEL,
   OPEN_WELCOME_EVENT,
   SCENARIOS,
@@ -18,25 +21,28 @@ import {
   currentStepIndex,
   doneFromData,
   splitBold,
-  stepHref,
-  targetTag,
   type Chapter,
   type ChapterId,
   type OnboardingState,
   type ScenarioId,
   type ScenarioStep,
 } from "@/lib/onboarding/content";
-import { setScenarioHints } from "@/components/onboarding/hints";
-import { StepHighlight } from "@/components/onboarding/StepHighlight";
+import { matches, pickMove, routeOf, skipAhead, type EngineInput, type Move, type RouteIds } from "@/lib/onboarding/engine";
+import { fieldIsFilled, fillField } from "@/lib/onboarding/field";
+import { exampleDraftLink } from "@/components/onboarding/example-link";
+import { MoveGuide, findTarget, type GuideBubble } from "@/components/onboarding/MoveGuide";
 import { DEMO_USERS, TEAM_LABELS, type Team } from "@/lib/demo-users";
+import { now } from "@/lib/dates";
 import { Button } from "@/components/ui/button";
 import { WelcomeModal } from "@/components/onboarding/WelcomeModal";
 import { readStorage, useIsClient, useIsDesktop, writeStorage } from "@/components/onboarding/storage";
 import { cn } from "@/lib/utils";
 
 const POLL_MS = 3_000;
-/** How long the anchor of a "viewed" step stays in view before the step counts as done. */
-const VIEWED_DWELL_MS = 1_200;
+/** A guide must stay the same this long before its bubble shows. */
+const GUIDE_SETTLE_MS = 400;
+/** How long a move whose target is missing is waited for (the page may still be loading) before it is skipped. */
+const WAIT_BEFORE_SKIP_MS = 3_000;
 const PANEL_WIDTH = 360;
 
 interface PanelPref {
@@ -76,11 +82,6 @@ function readSeen(seedVersion: number): string[] {
   return [];
 }
 
-function inView(el: Element): boolean {
-  const r = el.getBoundingClientRect();
-  return r.height > 0 && r.top < window.innerHeight * 0.9 && r.bottom > 80;
-}
-
 /**
  * The welcome card (first visit, and again from the demo bar's "?") and the scenario panel. Both sit outside the page's flow: the card is
  * a small fixed box that never covers a dialog, the panel reserves its 360 px by padding the body (html[data-onboarding-panel], globals.css),
@@ -97,17 +98,21 @@ export function OnboardingHost({ currentEmail }: { currentEmail: string }) {
   const welcome = welcomeChoice ?? (client && readStorage(STORAGE_KEYS.welcomeDismissed) !== "1");
   const pref = prefChoice ?? (client ? readPanel() : NO_PANEL);
   const [state, setState] = React.useState<OnboardingState | null>(null);
-  const [seen, setSeen] = React.useState<string[]>([]);
-  const [busy, setBusy] = React.useState<string | null>(null);
-  const seenRef = React.useRef<string[]>([]);
+  const [moveDone, setMoveDone] = React.useState<string[]>([]);
+  const [busy, setBusy] = React.useState(false);
   const versionRef = React.useRef<number | null>(null);
   const arrivalRef = React.useRef<{ email: string; path: string; refreshed: boolean } | null>(null);
   const panelRef = React.useRef<HTMLElement | null>(null);
-  const inViewSince = React.useRef<Record<string, number>>({});
+  const waitingRef = React.useRef<Record<string, number>>({});
+  const sigRef = React.useRef<{ key: string | null; since: number }>({ key: null, since: 0 });
+  // The guide that has been the same for a moment: a bubble that flickers while a page changes under it is not shown.
+  const [stableKey, setStableKey] = React.useState<string | null>(null);
   // Steps the visitor opened by hand (a done step to read again, a later one to read ahead), per chapter.
   const [expanded, setExpanded] = React.useState<{ chapter: ChapterId; ids: string[] }>({ chapter: "1a", ids: [] });
-  // Targets the visitor already clicked (or dismissed with Esc), for the current step only.
-  const [dismissals, setDismissals] = React.useState<{ step: string; items: string[] }>({ step: "", items: [] });
+  // The move whose guide the visitor hid with Esc.
+  const [hiddenFor, setHiddenFor] = React.useState<string | null>(null);
+  // What the page shows right now for the moves of the step the visitor is on (read a few times a second).
+  const [dom, setDom] = React.useState<{ present: string[]; valued: string[]; optionOpen: boolean; viewAsOpen: boolean; viewer: string | null }>({ present: [], valued: [], optionOpen: false, viewAsOpen: false, viewer: null });
 
   React.useEffect(() => {
     const a = arrivalRef.current;
@@ -153,12 +158,11 @@ export function OnboardingHost({ currentEmail }: { currentEmail: string }) {
       const res = await apiGet<OnboardingState>("/api/onboarding/state");
       if (cancelled || !res.ok) return;
       setState(res.data);
-      // After a restore (a new seedVersion) every scenario starts again; otherwise what this tab saw joins what storage remembers.
+      // After a restore (a new seedVersion) every scenario starts again; otherwise what this tab did joins what storage remembers.
       const stored = readSeen(res.data.seedVersion);
       const restored = versionRef.current !== null && versionRef.current !== res.data.seedVersion;
       versionRef.current = res.data.seedVersion;
-      seenRef.current = restored ? stored : Array.from(new Set([...seenRef.current, ...stored]));
-      setSeen(seenRef.current);
+      setMoveDone((prev) => (restored ? stored : Array.from(new Set([...prev, ...stored]))));
     };
     void load();
     const timer = setInterval(() => void load(), POLL_MS);
@@ -168,51 +172,98 @@ export function OnboardingHost({ currentEmail }: { currentEmail: string }) {
     };
   }, [pref.scenario, pathname]);
 
-  // Steps without a row to read are done once their part of the page has been in view, on the right page and as the right person.
-  React.useEffect(() => {
-    if (pref.scenario === null || !state) return;
-    const scenario = SCENARIOS[pref.scenario];
-    const chapter = chapterOf(pref.chapter);
-    const check = () => {
-      const found: string[] = [];
-      // Only the step the visitor is on can be read: later ones wait for their turn, so the panel never ticks ahead of the highlight.
-      const dataDoneNow = doneFromData(state);
-      const idx = currentStepIndex(chapter.steps, (id) => (chapter.steps.find((st) => st.id === id)!.check === "data" ? !!dataDoneNow[id] : seenRef.current.includes(id)));
-      for (const step of idx >= 0 ? [chapter.steps[idx]] : []) {
-        if (step.check !== "viewed" || seenRef.current.includes(step.id)) continue;
-        if (step.needsPersona && currentEmail !== step.persona) continue;
-        const href = stepHref(step, scenario.id, state);
-        if (!href || pathname !== href) continue;
-        const el = document.querySelector(`[data-onboarding="${step.anchor}"]`);
-        // Read, not passed: it counts once it has stayed in view for a moment, which is also long enough to see the highlight on it.
-        if (el && inView(el)) {
-          const since = inViewSince.current[step.id] ?? Date.now();
-          inViewSince.current[step.id] = since;
-          if (Date.now() - since >= VIEWED_DWELL_MS) found.push(step.id);
-        } else delete inViewSince.current[step.id];
-      }
-      if (!found.length) return;
-      seenRef.current = [...seenRef.current, ...found];
-      setSeen(seenRef.current);
-      writeStorage(STORAGE_KEYS.seen, JSON.stringify({ seedVersion: state.seedVersion, ids: seenRef.current }));
-    };
-    check();
-    const timer = setInterval(check, 600);
-    return () => clearInterval(timer);
-  }, [pref.scenario, pref.chapter, state, pathname, currentEmail]);
-
-  const scrollToAnchor = React.useCallback((anchor: string) => {
-    const started = Date.now();
-    const tryScroll = () => {
-      const el = document.querySelector(`[data-onboarding="${anchor}"]`);
-      if (el) {
-        window.scrollTo({ top: Math.max(0, el.getBoundingClientRect().top + window.scrollY - 96), behavior: "smooth" });
-      } else if (Date.now() - started < 5_000) {
-        setTimeout(tryScroll, 200);
-      }
-    };
-    setTimeout(tryScroll, 300);
+  /** Remembers moves as done (until the next restore). */
+  const markDone = React.useCallback((ids: string[]) => {
+    setMoveDone((prev) => (ids.every((id) => prev.includes(id)) ? prev : Array.from(new Set([...prev, ...ids]))));
   }, []);
+  const seedVersion = state?.seedVersion ?? null;
+  React.useEffect(() => {
+    if (seedVersion !== null) writeStorage(STORAGE_KEYS.seen, JSON.stringify({ seedVersion, ids: moveDone }));
+  }, [moveDone, seedVersion]);
+
+  const scenario = pref.scenario ? SCENARIOS[pref.scenario] : null;
+  const chapter: Chapter | null = scenario ? chapterOf(pref.chapter) : null;
+  const dataDone = doneFromData(state);
+  const ids: RouteIds = {
+    iss1042: state?.scenario1.issueId ?? null,
+    partnerIssue: state?.scenario2.issueId ?? null,
+    revolutIssue: state?.scenario2.revolutIssueId ?? null,
+    lloyds: state?.scenario2.partnerEntityId ?? null,
+  };
+  const route = routeOf(pathname, ids);
+  const doneSet = new Set(moveDone);
+  // A step is done when its data says so (and its closing words are read), or, with no row to read, when every move is.
+  const closingRead = (st: ScenarioStep) => st.moves.filter((m) => m.closing).every((m) => doneSet.has(m.id));
+  const isDone = (st: ScenarioStep) => (st.check === "data" ? !!dataDone[st.id] && closingRead(st) : st.moves.every((m) => doneSet.has(m.id)));
+  const doneCount = chapter ? chapter.steps.filter(isDone).length : 0;
+  const allDone = !!chapter && doneCount === chapter.steps.length;
+  const currentIdx = chapter ? currentStepIndex(chapter.steps, (id) => isDone(chapter.steps.find((st) => st.id === id)!)) : -1;
+  const currentStep = chapter && currentIdx >= 0 ? chapter.steps[currentIdx] : null;
+  const engine: EngineInput | null = currentStep
+    ? {
+        moves: currentStep.moves,
+        stepAs: currentStep.persona,
+        viewer: dom.viewer ?? currentEmail,
+        route,
+        ids,
+        done: doneSet,
+        present: new Set(dom.present),
+        valued: new Set(dom.valued),
+        stepDataDone: currentStep.check === "data" && !!dataDone[currentStep.id],
+      }
+    : null;
+  const pick = engine ? pickMove(engine) : null;
+
+  // What the page shows for the current step's moves, and the moves that are done by where the visitor is (arrived, filled, skipped).
+  const stepKey = currentStep?.id ?? null;
+  React.useEffect(() => {
+    if (!currentStep || !state || pref.scenario === null || pref.collapsed) return;
+    const moves = currentStep.moves;
+    const rt = routeOf(pathname, ids);
+    const base = { moves, stepAs: currentStep.persona, viewer: currentEmail, route: rt, ids, stepDataDone: false } as const;
+    const tick = () => {
+      const present: string[] = [];
+      const valued: string[] = [];
+      for (const m of moves) {
+        const el = findTarget(m.target, ids);
+        if (el) {
+          present.push(m.id);
+          if (m.doneWhen === "value" && fieldIsFilled(el, m)) valued.push(m.id);
+        }
+      }
+      // Who View as shows: it changes the moment a person is picked, before the page has been read again as them.
+      const shown = findTarget("view-as", ids)?.textContent ?? "";
+      const viewer = DEMO_USERS.find((u) => shown.includes(u.name))?.email ?? null;
+      const viewAs = DEMO_USERS.find((u) => u.email === currentStep.persona);
+      const viewAsOpen = !!viewAs && !!findTarget(`option~${viewAs.name}`, ids);
+      const pickMoveNow = pickMove({ ...base, viewer: viewer ?? currentEmail, done: new Set(moveDone), present: new Set(present), valued: new Set(valued), stepDataDone: currentStep.check === "data" && !!doneFromData(state)[currentStep.id] });
+      const key = guideKeyOf(pickMoveNow, viewAsOpen);
+      if (sigRef.current.key !== key) {
+        sigRef.current = { key, since: Date.now() };
+        setStableKey(null);
+      } else if (key && Date.now() - sigRef.current.since >= GUIDE_SETTLE_MS) setStableKey(key);
+      // A move whose target does not show up for a moment (nothing to offer again) is skipped: it was done some other way.
+      if (pickMoveNow.kind === "waiting") {
+        const since = waitingRef.current[pickMoveNow.move.id] ?? Date.now();
+        waitingRef.current[pickMoveNow.move.id] = since;
+        if (Date.now() - since > WAIT_BEFORE_SKIP_MS) markDone([pickMoveNow.move.id]);
+      } else waitingRef.current = {};
+      const optionOpen = pickMoveNow.kind === "move" && !!pickMoveNow.move.option && !!findTarget(`option~${pickMoveNow.move.option}`, ids);
+      setDom((prev) => {
+        const next = { present, valued, optionOpen, viewAsOpen, viewer };
+        return JSON.stringify(prev) === JSON.stringify(next) ? prev : next;
+      });
+      // Done by where the visitor is: remembered, so a later page does not undo it.
+      const auto = moves
+        .filter((m) => (m.doneWhen === "route" && m.arrive && matches(m.arrive, rt)) || (m.unless && [m.unless].flat().some((w) => matches(w, rt))) || (currentStep.check === "viewed" && valued.includes(m.id)))
+        .map((m) => m.id);
+      if (auto.length) markDone(auto);
+    };
+    tick();
+    const timer = setInterval(tick, 250);
+    return () => clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stepKey, state, pathname, currentEmail, pref.scenario, pref.collapsed, markDone, moveDone]);
 
   /** Switches View as with the demo's own route. Returns false (and says so) when it fails. */
   async function switchPerson(email: string): Promise<boolean> {
@@ -229,35 +280,25 @@ export function OnboardingHost({ currentEmail }: { currentEmail: string }) {
     return true;
   }
 
-  /** The visitor is already on the step's page as somebody else: switch the person and re-read the page. */
-  async function switchHere(step: ScenarioStep) {
-    setBusy(step.id);
+  /** Skip ahead: mark the way there as done, switch the person if the move is somebody else's, and open its page. */
+  async function skip() {
+    if (!currentStep || !engine) return;
+    const r = skipAhead(engine);
+    if (!r) return;
+    setBusy(true);
     try {
-      if (await switchPerson(step.persona)) router.refresh();
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  async function takeMeThere(scenarioId: ScenarioId, step: ScenarioStep) {
-    const href = stepHref(step, scenarioId, state);
-    if (!href) return;
-    setBusy(step.id);
-    setDismissals({ step: step.id, items: [] }); // a new go: the highlight is there again
-    try {
-      if (currentEmail !== step.persona && !(await switchPerson(step.persona))) return;
-      if (href === pathname) {
-        // Already on the page: a refresh re-reads it as the new person; with the same person there is nothing to reload.
-        if (currentEmail !== step.persona) router.refresh();
-      } else {
-        // The layout (demo bar, this panel) keeps the old person until it is refreshed, which the effect below does once the page has arrived:
+      markDone(r.markDone);
+      setHiddenFor(null);
+      const switched = r.as !== currentEmail;
+      if (switched && !(await switchPerson(r.as))) return;
+      if (r.href && r.href !== pathname) {
+        // The layout (demo bar, this panel) keeps the old person until it is refreshed, which the effect above does once the page has arrived:
         // refreshing at once would cancel the navigation.
-        if (currentEmail !== step.persona) arrivalRef.current = { email: step.persona, path: href, refreshed: false };
-        router.push(href);
-      }
-      scrollToAnchor(step.anchor);
+        if (switched) arrivalRef.current = { email: r.as, path: r.href.split("?")[0], refreshed: false };
+        router.push(r.href);
+      } else if (switched) router.refresh();
     } finally {
-      setBusy(null);
+      setBusy(false);
     }
   }
 
@@ -266,46 +307,50 @@ export function OnboardingHost({ currentEmail }: { currentEmail: string }) {
     setPanel({ ...pref, scenario: id, chapter: FIRST_CHAPTER[id], collapsed: false });
   }
 
-  const scenario = pref.scenario ? SCENARIOS[pref.scenario] : null;
-  const chapter: Chapter | null = scenario ? chapterOf(pref.chapter) : null;
-  const dataDone = doneFromData(state);
-  const isDone = (s: ScenarioStep) => (s.check === "data" ? !!dataDone[s.id] : seen.includes(s.id));
-  const doneCount = chapter ? chapter.steps.filter(isDone).length : 0;
-  const allDone = !!chapter && doneCount === chapter.steps.length;
-  const currentIdx = chapter ? currentStepIndex(chapter.steps, (id) => isDone(chapter.steps.find((st) => st.id === id)!)) : -1;
-  const currentStep = chapter && currentIdx >= 0 ? chapter.steps[currentIdx] : null;
   // The story folds itself away once the first step is done; a click on its heading overrides that either way.
   const firstDone = !!chapter && isDone(chapter.steps[0]);
   const prologueOpen = !!chapter && !pref.closedPrologues.includes(chapter.id) && (pref.openedPrologues.includes(chapter.id) || !firstDone);
   const openIds = chapter && expanded.chapter === chapter.id ? expanded.ids : [];
   const toggleStep = (id: string) => chapter && setExpanded({ chapter: chapter.id, ids: openIds.includes(id) ? openIds.filter((x) => x !== id) : [...openIds, id] });
-  const dismissedNow = currentStep && dismissals.step === currentStep.id ? dismissals.items : [];
-  const highlightOn = !!currentStep && !!scenario && !pref.collapsed && desktop && currentEmail === currentStep.persona && !!state;
-  // A click on a button hands the highlight to the next target (a dialog's own button); a click on something to read ends it, since its other targets
-  // are only for finding the page.
-  const dismissOne = (raw: string) =>
-    setDismissals((d) => {
-      if (!currentStep) return d;
-      if (currentStep.check === "viewed") return { step: currentStep.id, items: currentStep.target };
-      return { step: currentStep.id, items: d.step === currentStep.id ? [...d.items, raw] : [raw] };
-    });
-  const dismissAll = () => currentStep && setDismissals({ step: currentStep.id, items: currentStep.target });
 
-  // When a step ticks the next one opens, and the panel brings it into view.
-  const currentKey = chapter && currentStep ? `${chapter.id}:${currentStep.id}` : null;
-  React.useEffect(() => {
-    if (!currentKey || !panelRef.current) return;
-    const li = panelRef.current.querySelector<HTMLElement>(`[data-onboarding-step="${currentKey.split(":")[1]}"]`);
-    li?.scrollIntoView({ block: "nearest", behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
-  }, [currentKey]);
-
-  // Hints next to a form while the step they help with is the open one (see hints.tsx).
-  const reportStepOpen = chapter?.id === "2" && !dataDone["s2-report"];
-  const draftStepOpen = chapter?.id === "1b" && !dataDone["s1b-share"];
-  React.useEffect(() => {
-    setScenarioHints({ report: reportStepOpen && !pref.collapsed, draft: draftStepOpen && !pref.collapsed });
-    return () => setScenarioHints({ report: false, draft: false });
-  }, [reportStepOpen, draftStepOpen, pref.collapsed]);
+  // What the guide says now, and where it points.
+  const viewAsUser = pick?.kind === "view-as" ? DEMO_USERS.find((u) => u.email === pick.as) : undefined;
+  const viewAsLabel = viewAsUser ? `${TEAM_LABELS[viewAsUser.team]} · ${viewAsUser.name}` : "";
+  let guide: { key: string; targets: string[]; bubble: GuideBubble; text: string } | null = null;
+  if (pick?.kind === "move" && currentStep) {
+    const m = pick.move;
+    const say = m.kind === "pick" && !dom.optionOpen && m.sayOpen ? m.sayOpen : m.say;
+    guide = {
+      key: guideKeyOf(pick, dom.viewAsOpen) ?? m.id,
+      targets: m.kind === "pick" && m.option ? [`option~${m.option}`, m.target] : [m.target],
+      text: say,
+      bubble: {
+        say,
+        counter: `${pick.index + 1} of ${currentStep.moves.length}`,
+        kind: m.kind,
+        suggestion: m.fill ? suggestionFor(m) : undefined,
+        onGotIt: () => markDone([m.id]),
+        onFill: (el) => {
+          fillField(el, m, resolveFill(m.fill ?? "", el));
+        },
+      },
+    };
+  } else if (pick?.kind === "view-as" && viewAsUser) {
+    const text = dom.viewAsOpen ? `Pick **${viewAsLabel}**` : "Open **View as**";
+    guide = {
+      key: guideKeyOf(pick, dom.viewAsOpen) ?? "",
+      targets: dom.viewAsOpen ? [`option~${viewAsUser.name}`] : ["view-as"],
+      text,
+      bubble: { say: text, counter: `${currentStep ? currentStep.moves.indexOf(pick.after) + 1 : 1} of ${currentStep?.moves.length ?? 1}`, kind: "click" },
+    };
+  }
+  // The targets that come after this move: the bubble keeps off them (the Resolve issue button, while it points at the Solution field).
+  const avoid: string[] = [];
+  if (pick?.kind === "move" && currentStep) {
+    const next = currentStep.moves.slice(pick.index + 1, pick.index + 3);
+    for (const n of next) avoid.push(n.target);
+  }
+  const guideOn = !!guide && guide.key === stableKey && !pref.collapsed && desktop && !!state && pref.scenario !== null;
 
   const goChapter = (id: ChapterId) => {
     const sc = chapterOf(id).scenario;
@@ -394,11 +439,8 @@ export function OnboardingHost({ currentEmail }: { currentEmail: string }) {
             {chapter.steps.map((step, i) => {
               const done = isDone(step);
               const current = i === currentIdx;
-              const href = stepHref(step, scenario.id, state);
               const open = current || openIds.includes(step.id);
               const stateName = done ? "done" : current ? "current" : "later";
-              const viewer = DEMO_USERS.find((u) => u.email === currentEmail);
-              const wrongPerson = current && !!href && href === pathname && currentEmail !== step.persona;
               return (
                 <li
                   key={step.id}
@@ -435,37 +477,30 @@ export function OnboardingHost({ currentEmail }: { currentEmail: string }) {
                         </p>
                       )}
                       <p className="text-[13px] leading-5 text-text-secondary">{step.text}</p>
-                      {wrongPerson && (
-                        <p data-onboarding="wrong-person" className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-sm bg-tint p-2 text-meta text-text">
-                          <span>
-                            You are viewing as {viewer?.name ?? currentEmail}. This step is {step.personaName}&rsquo;s.
-                          </span>
-                          <button type="button" onClick={() => void switchHere(step)} disabled={busy === step.id} className="text-link-text hover:underline">
-                            Switch to {step.personaName}
-                          </button>
+                      {current && pick?.kind === "off" && (
+                        <div data-onboarding="off-path" className="flex flex-col items-start gap-2 rounded-sm bg-tint p-2 text-body">
+                          <p>You are off the path.</p>
+                          <Button variant="secondary" disabled={!pick.href} onClick={() => pick.href && router.push(pick.href)}>
+                            Back on track
+                          </Button>
+                        </div>
+                      )}
+                      {current && guide && (
+                        <p data-onboarding="now" className="text-body text-text" aria-live="polite">
+                          <span className="font-semibold">Now: </span>
+                          {splitBold(guide.text).map((part, k) => (part.bold ? <strong key={k} className="font-semibold">{part.text}</strong> : <React.Fragment key={k}>{part.text}</React.Fragment>))}
                         </p>
                       )}
-                      <div data-onboarding="do-this" className="flex flex-col gap-1">
-                        <p className="text-label text-text">Do this</p>
-                        <ol className="list-decimal pl-5 text-body text-text">
-                          {step.doThis.map((line) => (
-                            <li key={line}>
-                              {splitBold(line).map((part, k) => (part.bold ? <strong key={k} className="font-semibold">{part.text}</strong> : <React.Fragment key={k}>{part.text}</React.Fragment>))}
-                            </li>
-                          ))}
-                        </ol>
-                      </div>
-                      {(current || done) && (
-                        <div className="mt-1">
-                          <Button
-                            variant="secondary"
-                            loading={busy === step.id}
-                            disabled={!href}
-                            disabledReason={!href ? "Do the earlier step first" : undefined}
-                            onClick={() => void takeMeThere(scenario.id, step)}
-                          >
-                            Take me there
-                          </Button>
+                      {current && (
+                        <div className="flex items-center gap-4 text-meta">
+                          {guide && (
+                            <button type="button" data-onboarding="show-me" onClick={() => setHiddenFor(null)} className="text-link-text hover:underline">
+                              Show me
+                            </button>
+                          )}
+                          <button type="button" data-onboarding="skip-ahead" disabled={busy} onClick={() => void skip()} className="text-link-text hover:underline">
+                            Skip ahead
+                          </button>
                         </div>
                       )}
                     </div>
@@ -519,17 +554,46 @@ export function OnboardingHost({ currentEmail }: { currentEmail: string }) {
         </aside>
       )}
 
-      {highlightOn && currentStep && (
-        <StepHighlight
-          key={currentStep.id}
-          stepId={currentStep.id}
-          targets={currentStep.target}
-          dismissed={dismissedNow}
-          tag={targetTag(currentStep)}
-          onDismiss={dismissOne}
-          onDismissAll={dismissAll}
+      {guideOn && guide && (
+        <MoveGuide
+          key={guide.key}
+          moveId={guide.key}
+          targets={guide.targets}
+          ids={ids}
+          bubble={guide.bubble}
+          hidden={hiddenFor === guide.key}
+          avoidTargets={avoid}
+          onTargetClick={() => {
+            if (pick?.kind === "move" && pick.move.doneWhen === "click") markDone([pick.move.id]);
+          }}
+          onEsc={() => setHiddenFor(guide.key)}
         />
       )}
     </>
   );
+}
+
+/** Which guide a pick is: a move, or one phase of View as. Null when there is none. */
+function guideKeyOf(pick: ReturnType<typeof pickMove>, viewAsOpen: boolean): string | null {
+  if (pick.kind === "move") return pick.move.id;
+  if (pick.kind === "view-as") return `view-as:${pick.after.id}:${viewAsOpen ? "pick" : "open"}`;
+  return null;
+}
+
+/** The text a "type" move suggests, as the bubble shows it. */
+function suggestionFor(m: Move): string {
+  const fill = m.fill ?? "";
+  if (fill === EXAMPLE_LINK_TOKEN) return exampleDraftLink();
+  if (fill === EVENT_DATE_TOKEN || fill === EVENT_TIME_TOKEN) return resolveFill(fill, null);
+  return fill;
+}
+
+/** `fill` with its tokens resolved: the example link, or the event date or time (the field's zone, 90 minutes before the demo's now). */
+function resolveFill(fill: string, el: Element | null): string {
+  if (fill === EXAMPLE_LINK_TOKEN) return exampleDraftLink();
+  if (fill !== EVENT_DATE_TOKEN && fill !== EVENT_TIME_TOKEN) return fill;
+  const zone = el?.getAttribute("data-zone") ?? "UTC";
+  const at = new Date(now().getTime() - 90 * 60_000);
+  if (fill === EVENT_DATE_TOKEN) return new Intl.DateTimeFormat("en-CA", { timeZone: zone, year: "numeric", month: "2-digit", day: "2-digit" }).format(at);
+  return new Intl.DateTimeFormat("en-GB", { timeZone: zone, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(at);
 }

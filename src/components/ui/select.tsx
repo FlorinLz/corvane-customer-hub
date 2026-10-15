@@ -59,6 +59,7 @@ const SelectItem = React.forwardRef<
 >(({ className, children, ...props }, ref) => (
   <SelectPrimitive.Item
     ref={ref}
+    data-onboarding="option"
     className={cn(
       "relative flex min-h-9 w-full cursor-pointer select-none items-center gap-2 rounded-sm px-3 pr-8 text-body text-text outline-none",
       "data-[highlighted]:bg-tint",

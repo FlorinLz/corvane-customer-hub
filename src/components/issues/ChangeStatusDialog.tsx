@@ -148,13 +148,13 @@ export function ChangeStatusDialog({
             <>
               <div className="flex flex-col gap-1">
                 <label htmlFor="resolve-root-cause" className="text-meta text-text-secondary">Root cause</label>
-                <Textarea id="resolve-root-cause" value={rootCause} onChange={(e) => setRootCause(e.target.value)} maxLength={MAX_ROOT_CAUSE} aria-invalid={rootCause.length > 0 && rootCause.trim().length < MIN_ROOT_CAUSE} />
+                <Textarea id="resolve-root-cause" data-onboarding="resolve-root-cause" value={rootCause} onChange={(e) => setRootCause(e.target.value)} maxLength={MAX_ROOT_CAUSE} aria-invalid={rootCause.length > 0 && rootCause.trim().length < MIN_ROOT_CAUSE} />
                 <span className="self-end text-meta text-text-secondary">{rootCause.length} / {MAX_ROOT_CAUSE}</span>
                 {rootCause.length > 0 && rootCause.trim().length < MIN_ROOT_CAUSE && <FieldError>Enter at least 20 characters</FieldError>}
               </div>
               <div className="flex flex-col gap-1">
                 <label htmlFor="resolve-solution" className="text-meta text-text-secondary">Solution</label>
-                <Textarea id="resolve-solution" value={solution} onChange={(e) => setSolution(e.target.value)} maxLength={MAX_ROOT_CAUSE} aria-invalid={solution.length > 0 && solution.trim().length < MIN_ROOT_CAUSE} />
+                <Textarea id="resolve-solution" data-onboarding="resolve-solution" value={solution} onChange={(e) => setSolution(e.target.value)} maxLength={MAX_ROOT_CAUSE} aria-invalid={solution.length > 0 && solution.trim().length < MIN_ROOT_CAUSE} />
                 <span className="self-end text-meta text-text-secondary">{solution.length} / {MAX_ROOT_CAUSE}</span>
                 {solution.length > 0 && solution.trim().length < MIN_ROOT_CAUSE && <FieldError>Enter at least 20 characters</FieldError>}
               </div>
@@ -162,8 +162,8 @@ export function ChangeStatusDialog({
                 <div className="flex flex-col gap-1">
                   <span className="text-meta text-text-secondary" id="resolve-event-label">Event date and time *</span>
                   <div className="flex items-center gap-2">
-                    <Input type="date" aria-labelledby="resolve-event-label" data-testid="resolve-event-date" value={eventDate} aria-invalid={!!eventError} onChange={(e) => setEventDate(e.target.value)} className="w-[170px]" />
-                    <Input type="time" aria-label="Event time" data-testid="resolve-event-time" value={eventTime} aria-invalid={!!eventError} onChange={(e) => setEventTime(e.target.value)} className="w-[110px]" />
+                    <Input type="date" aria-labelledby="resolve-event-label" data-testid="resolve-event-date" data-onboarding="resolve-event-date" data-zone={eventNeeded.zone} value={eventDate} aria-invalid={!!eventError} onChange={(e) => setEventDate(e.target.value)} className="w-[170px]" />
+                    <Input type="time" aria-label="Event time" data-testid="resolve-event-time" data-onboarding="resolve-event-time" data-zone={eventNeeded.zone} value={eventTime} aria-invalid={!!eventError} onChange={(e) => setEventTime(e.target.value)} className="w-[110px]" />
                     <span className="text-meta text-text-secondary">{tzAbbreviation(eventNeeded.awareAt, eventNeeded.zone)}</span>
                   </div>
                   {eventError && (

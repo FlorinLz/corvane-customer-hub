@@ -69,6 +69,7 @@ export function ViewAsSwitcher({ id, currentEmail }: { id?: string; currentEmail
       <SelectTrigger
         id={id}
         aria-label="View as"
+        data-onboarding="view-as"
         className="h-6 gap-2 rounded-sm border border-white/40 bg-transparent px-2 text-meta text-white focus-visible:outline-white"
       >
         <SelectValue>

@@ -3,6 +3,8 @@
  * "Why this?" notes and the tests. British English, short sentences, no em dashes.
  */
 
+import type { IssueRef, Move, Where } from "@/lib/onboarding/engine";
+
 export const REPO_URL = "https://github.com/FlorinLz/corvane-customer-hub";
 export const START_HERE_URL = `${REPO_URL}#start-here`;
 export const DECISIONS_URL = `${REPO_URL}/blob/main/DECISIONS.md`;
@@ -11,7 +13,7 @@ export const DECISIONS_URL = `${REPO_URL}/blob/main/DECISIONS.md`;
 export const STORAGE_KEYS = {
   welcomeDismissed: "ch_onboarding_welcome_v1",
   mobileDismissed: "ch_onboarding_mobile_v1",
-  seen: "ch_onboarding_seen_v1",
+  seen: "ch_onboarding_moves_v1",
   panel: "ch_onboarding_panel_v2",
 } as const;
 
@@ -74,6 +76,8 @@ export interface OnboardingState {
     /** Lloyds Bank plc, the entity page the impact step opens. */
     partnerEntityId: string | null;
     issueId: string | null;
+    /** Revolut Ltd's linked issue under the partner issue, once the linked issues exist. */
+    revolutIssueId: string | null;
     acknowledged: boolean;
     degraded: boolean;
     linkedCount: number;
@@ -89,26 +93,13 @@ export interface ScenarioStep {
   /** The persona the step is told from (a DEMO_USERS email). */
   persona: string;
   personaName: string;
-  /** Where "Take me there" goes: Home, the scenario's issue page, or the partner's entity page (its Partner tab). */
-  page: "home" | "issue" | "entity";
-  /** data-onboarding value scrolled to after the jump. */
-  anchor: string;
   /**
-   * How the step turns done. "data": the server says so (a row exists). "viewed": there is no row to read, so the step is done once the
-   * visitor has had its anchor in view on the right page (the persona too when `needsPersona`); remembered until the data is restored.
+   * How the step turns done. "data": the server says so (a row exists). "viewed": there is no row to read, so the step is done once the visitor
+   * has been through its moves (the last "Got it").
    */
   check: "data" | "viewed";
-  needsPersona?: boolean;
-  /**
-   * What to do, in order, one to three short actions. A UI label is written between ** ** and shows in bold. The story (`text`) stays the story.
-   */
-  doThis: string[];
-  /**
-   * The element to click (or read, for "viewed" steps), as data-onboarding values in order of preference: the first one present on the page is
-   * highlighted. A dialog's own button comes before the button that opens it, so the highlight moves into the dialog and then to its submit.
-   * Syntax: `name`, `scope/name` (inside the data-onboarding="scope" element) or `name~text` (the element whose text contains `text`).
-   */
-  target: string[];
+  /** One action at a time, in order (src/lib/onboarding/engine.ts). The bubble on the page shows the current one. */
+  moves: Move[];
 }
 
 /** What the end of a chapter offers: the next chapter and a way out, or the link to the README. */
@@ -138,6 +129,31 @@ const ADRIAN = { persona: "adrian.koh@corvane.example", personaName: "Adrian Koh
 const KEVIN = { persona: "kevin.lim@corvane.example", personaName: "Kevin Lim" };
 const MEI = { persona: "mei.chen@corvane.example", personaName: "Mei Chen" };
 
+
+/** The part of the update message's last open line that the person completes (src/server/issues/stage-message.ts; a unit test keeps the two the same). */
+export const UPDATE_PLACEHOLDER = "[one line to complete before sending]";
+/** In a move's `fill`: the example link on the approved document host, and the event date and time (the viewer's zone, 90 minutes before now). */
+export const EXAMPLE_LINK_TOKEN = "@exampleLink";
+export const EVENT_DATE_TOKEN = "@eventDate";
+export const EVENT_TIME_TOKEN = "@eventTime";
+
+// Move builders. A move is one action; the engine shows the first one not done whose page and person fit.
+const HOME: Where = { page: "home" };
+const issueAt = (issue: IssueRef): Where => ({ page: "issue", issue });
+const click = (id: string, where: Where, target: string, say: string, o: Partial<Move> = {}): Move => ({ id, where, target, kind: "click", say, doneWhen: "click", ...o });
+const read = (id: string, where: Where, target: string, say: string, o: Partial<Move> = {}): Move => ({ id, where, target, kind: "read", say, doneWhen: "gotIt", ...o });
+const type = (id: string, where: Where, target: string, say: string, fill: string, o: Partial<Move> = {}): Move => ({ id, where, target, kind: "type", say, fill, doneWhen: "value", ...o });
+const pick = (id: string, where: Where, target: string, say: string, option: string, o: Partial<Move> = {}): Move => ({ id, where, target, kind: "pick", say, option, doneWhen: "value", ...o });
+/** "Click Home", skipped on Home. */
+const goHome = (id: string, o: Partial<Move> = {}): Move => click(id, { page: "any" }, "home-link", "Click **Home**", { doneWhen: "route", arrive: HOME, unless: HOME, nav: true, ...o });
+/** The way to an issue: Click Home (skipped on Home or on the issue), then its row on Home. Skipped altogether once the visitor is on the issue. */
+const enterIssue = (id: string, issue: IssueRef, row: string): Move[] => [
+  goHome(`${id}-home`, { unless: [HOME, issueAt(issue)] }),
+  click(`${id}-row`, HOME, row, row.endsWith("@partner") ? "Click the partner issue row" : "Click **ISS-1042**", { doneWhen: "route", arrive: issueAt(issue), unless: issueAt(issue), nav: true }),
+];
+/** The Channel in a record dialog. */
+const channel = (id: string, where: Where): Move => pick(id, where, "dialog-channel", "Pick **Email**", "Email", { sayOpen: "Open **Channel**, then pick **Email**." });
+
 export const CONTINUE_LABEL = "Continue: Closing the loop \u00b7 3 min";
 export const FINISH_LABEL = "Finish here";
 
@@ -157,60 +173,61 @@ export const SCENARIOS: Record<ScenarioId, Scenario> = {
         steps: [
           {
             id: "s1-home",
-            doThis: ["Find **ISS-1042** at the top of the **Issues** table.", "Read **Next actions**."],
-            target: ["issue-row~ISS-1042"],
             title: "Start on Home as Emma Wilson",
-            text: "Emma speaks for Corvane to MPS. ISS-1042 is at the top of her Home, and Next actions shows who it waits on: Kevin, still investigating.",
+            text: "Emma speaks for Corvane to MPS. ISS-1042 sits at the top of her Home, waiting on Kevin, who is still investigating.",
             ...EMMA,
-            page: "home",
-            anchor: "home-issues",
             check: "viewed",
-            needsPersona: true,
+            moves: [
+              goHome("h-home"),
+              read("h-row", HOME, "issue-row~ISS-1042", "Emma's issue. It waits on Kevin, still investigating."),
+            ],
           },
           {
             id: "s1-issue",
-            doThis: ["Read **Your next action**.", "Scroll to the **Action plan**."],
-            target: ["action-plan"],
             title: "Open ISS-1042",
-            text: "Your next action shows Emma has nothing due and names who is next. The Action plan shows the night in process order: the alert, Kevin's acknowledgement 9 minutes later, the customer told within the hour.",
+            text: "Emma has nothing due on ISS-1042, and can see who is next. The Action plan shows the night in process order: the alert, Kevin's acknowledgement 9 minutes later, the customer told within the hour.",
             ...EMMA,
-            page: "issue",
-            anchor: "action-plan",
             check: "viewed",
-            needsPersona: true,
+            moves: [
+              click("i-open", HOME, "issue-row~ISS-1042", "Click **ISS-1042**", { doneWhen: "route", arrive: issueAt("iss1042"), nav: true }),
+              read("i-next", issueAt("iss1042"), "next-action", "Nothing due for Emma. Kevin owns the next step."),
+              read("i-plan", issueAt("iss1042"), "action-plan", "Overnight, in order: alert, Kevin acknowledged in 9 minutes, customer told within the hour."),
+            ],
           },
           {
             id: "s1-log",
-            doThis: ["Scroll to the **Communication log**.", "Read Kevin's first notification to Silvia."],
-            target: ["communication-log"],
             title: "Read the Communication log",
-            text: "Kevin wrote to Silvia Moretti, the MPS incident contact, during the night. Emma reads exactly what was promised before she speaks to her.",
+            text: "Kevin wrote to Silvia Moretti, the MPS incident contact, during the night. Emma needs to know exactly what was promised before she speaks to her.",
             ...EMMA,
-            page: "issue",
-            anchor: "communication-log",
             check: "viewed",
+            moves: [
+              read("l-log", issueAt("iss1042"), "communication-log", "Kevin's message to Silvia at night. Emma reads what was promised."),
+            ],
           },
           {
             id: "s1-compliance",
-            doThis: ["Scroll to the **Compliance** card.", "In **Customer obligations**, find **Facts needed within 2 h**."],
-            target: ["customer-obligations"],
             title: "Look at the Compliance card",
-            text: "MPS is a bank under DORA, so ISS-1042 is flagged for Compliance. Mei Chen assessed it as a possible major incident: MPS may have to report it to its regulator and needs the facts from Corvane within 2 hours, as Customer obligations shows.",
+            text: "MPS is a bank under DORA, so ISS-1042 is flagged for Compliance. Mei Chen assessed it as a possible major incident: MPS may have to report it to its regulator and needs the facts from Corvane within 2 hours.",
             ...EMMA,
-            page: "issue",
-            anchor: "compliance-card",
             check: "viewed",
+            moves: [
+              read("c-card", issueAt("iss1042"), "compliance-card", "MPS is under DORA. Compliance assessed a possible major incident."),
+              read("c-obl", issueAt("iss1042"), "customer-obligations", "MPS needs the facts from Corvane within 2 hours."),
+            ],
           },
           {
             id: "s1-update",
-            doThis: ["In the message panel, complete the line **What we are doing**.", "Click **Copy message**, then **Record update**.", "Choose the **Channel** and click **Record notification**."],
-            target: ["record-communication-submit", "record-communication"],
             title: "Send the Update",
-            text: "Send Silvia an Update from the message panel, then record it. The Communication log shows it at once, with Emma's name and the time.",
+            text: "MPS is owed an Update. Emma sends it and records it, and the Communication log shows it at once, with her name and the time.",
             ...EMMA,
-            page: "issue",
-            anchor: "message-panel",
             check: "data",
+            moves: [
+              type("u-type", issueAt("iss1042"), "message-body", "Write what Ops is doing now.", "Ops renewed the expired certificate and is watching the endpoint.", { replace: UPDATE_PLACEHOLDER }),
+              click("u-copy", issueAt("iss1042"), "copy-message", "Click **Copy message**"),
+              click("u-record", issueAt("iss1042"), "record-communication", "Click **Record update**"),
+              channel("u-channel", issueAt("iss1042")),
+              click("u-submit", issueAt("iss1042"), "record-communication-submit", "Click **Record notification**"),
+            ],
           },
         ],
         end: {
@@ -228,58 +245,72 @@ export const SCENARIOS: Record<ScenarioId, Scenario> = {
         steps: [
           {
             id: "s1b-resolve",
-            doThis: ["Click **Resolve** in **Your next action**.", "Fill **Root cause** and **Solution**, then click **Resolve issue**."],
-            target: ["resolve-submit", "next-action/resolve"],
             title: "Resolve as Kevin Lim",
-            text: "Switch to Kevin with View as. As owner he resolves ISS-1042. Watch the Action plan: the report steps appear, each with its person and deadline.",
+            text: "Kevin owns ISS-1042. Once he resolves it, the report steps appear, each with its person and deadline.",
             ...KEVIN,
-            page: "issue",
-            anchor: "action-plan",
             check: "data",
+            moves: [
+              ...enterIssue("s1b-resolve-in", "iss1042", "issue-row~ISS-1042"),
+              click("r-open", issueAt("iss1042"), "next-action/resolve", "Click **Resolve**"),
+              type("r-cause", issueAt("iss1042"), "resolve-root-cause", "Write the root cause.", "The EU VoP IT endpoint certificate expired after the rotation job failed."),
+              type("r-solution", issueAt("iss1042"), "resolve-solution", "Write the solution.", "Certificate renewed and the rotation job fixed. Checks are back to normal."),
+              click("r-submit", issueAt("iss1042"), "resolve-submit", "Click **Resolve issue**"),
+            ],
           },
           {
             id: "s1b-confirm",
-            doThis: ["Click **Confirm resolution with the customer** in the message panel.", "Choose the **Channel** and click **Confirm resolution**."],
-            target: ["confirm-resolution-submit", "confirm-resolution"],
             title: "Confirm resolution as Emma Wilson",
             text: "Emma checks with Silvia that payments flow again and records it. The customer side is done; the report is still open.",
             ...EMMA,
-            page: "issue",
-            anchor: "action-plan",
             check: "data",
+            moves: [
+              ...enterIssue("s1b-confirm-in", "iss1042", "issue-row~ISS-1042"),
+              click("cf-goto", issueAt("iss1042"), "next-action/go-to-message", "Click **Go to the message**"),
+              click("cf-open", issueAt("iss1042"), "confirm-resolution", "Click **Confirm resolution with the customer**"),
+              channel("cf-channel", issueAt("iss1042")),
+              click("cf-submit", issueAt("iss1042"), "confirm-resolution-submit", "Click **Confirm resolution**"),
+            ],
           },
           {
             id: "s1b-share",
-            doThis: ["Click **Share draft** in **Your next action**.", "Click **Use example link**, then write one sentence in **Summary**.", "Click **Share draft**."],
-            target: ["use-example-link", "share-draft-submit", "next-action/share-draft"],
             title: "Share the draft report as Kevin",
             text: "Kevin writes what failed and why, and shares the draft. The deadline is 20 days from resolution, taken from the MPS contract.",
             ...KEVIN,
-            page: "issue",
-            anchor: "action-plan",
             check: "data",
+            moves: [
+              ...enterIssue("s1b-share-in", "iss1042", "issue-row~ISS-1042"),
+              click("sh-open", issueAt("iss1042"), "next-action/share-draft", "Click **Share draft**"),
+              type("sh-link", issueAt("iss1042"), "share-draft-link", "Use the example link on the approved host.", EXAMPLE_LINK_TOKEN),
+              type("sh-summary", issueAt("iss1042"), "share-draft-summary", "Write one sentence of summary.", "Certificate expiry on the EU VoP IT endpoint: cause, impact and fixes."),
+              click("sh-submit", issueAt("iss1042"), "share-draft-submit", "Click **Share draft**"),
+            ],
           },
           {
             id: "s1b-approve",
-            doThis: ["Click **Approve report** in **Your next action**.", "Click **Approve report** in the dialog."],
-            target: ["approve-report-submit", "next-action/approve-report"],
             title: "Approve as Mei Chen",
             text: "Mei reads the draft with the regulator in mind. She approves it, or asks for changes and it goes back to Kevin with her reason.",
             ...MEI,
-            page: "issue",
-            anchor: "action-plan",
             check: "data",
+            moves: [
+              ...enterIssue("s1b-approve-in", "iss1042", "issue-row~ISS-1042"),
+              click("ap-open", issueAt("iss1042"), "next-action/approve-report", "Click **Approve report**"),
+              click("ap-submit", issueAt("iss1042"), "approve-report-submit", "Click **Approve report** to confirm."),
+            ],
           },
           {
             id: "s1b-send",
-            doThis: ["Click **Record report sent** in **Your next action**.", "Choose the **Channel** and click **Record report sent**."],
-            target: ["record-report-sent-submit", "next-action/record-report-sent"],
             title: "Send the approved report as Kevin",
             text: "Kevin sends the approved report to MPS. ISS-1042 closes on its own: every step is done, and nothing is left on anyone's Home.",
             ...KEVIN,
-            page: "issue",
-            anchor: "action-plan",
             check: "data",
+            moves: [
+              ...enterIssue("s1b-send-in", "iss1042", "issue-row~ISS-1042"),
+              click("sd-open", issueAt("iss1042"), "next-action/record-report-sent", "Click **Record report sent**"),
+              channel("sd-channel", issueAt("iss1042")),
+              click("sd-submit", issueAt("iss1042"), "record-report-sent-submit", "Click **Record report sent**"),
+              goHome("sd-home", { closing: true }),
+              read("sd-read", HOME, "home-issues", "ISS-1042 closed itself. Nothing is left on anyone's Home.", { closing: true }),
+            ],
           },
         ],
         end: {
@@ -309,71 +340,94 @@ export const SCENARIOS: Record<ScenarioId, Scenario> = {
         steps: [
           {
             id: "s2-impact",
-            doThis: ["Open the **Partner** tab.", "Under **UK CoP / GB**, read **Customers on this coverage**."],
-            target: ["partner-customers", "partner-tab"],
             title: "Check who depends on Lloyds",
-            // The Partner tab's UK CoP / GB card lists the customers on that coverage (the rule shared with Affected customers).
-            text: "As Lukas, open the Lloyds Partner tab. UK CoP / GB lists every customer that sends its checks through Lloyds. These are the customers waiting on Lukas.",
+            text: "Lloyds answers UK CoP checks for several Corvane customers. Lukas checks who depends on it before reporting.",
             ...LUKAS,
-            page: "entity",
-            anchor: "partner-customers",
             check: "viewed",
-            needsPersona: true,
+            moves: [
+              type("im-search", { page: "any" }, "global-search", "Type **Lloyds** in the search bar.", "Lloyds", { nav: true, unless: { page: "entity" } }),
+              click("im-enter", { page: "any" }, "global-search", "Press **Enter** to search.", { doneWhen: "route", arrive: { page: "search" }, unless: { page: "entity" }, nav: true }),
+              click("im-result", { page: "search" }, "search-result~Lloyds Bank plc", "Click **Lloyds Bank plc**", { doneWhen: "route", arrive: { page: "entity" }, nav: true }),
+              click("im-tab", { page: "entity" }, "partner-tab", "Click the **Partner** tab", { doneWhen: "route", arrive: { page: "entity", tab: "partner" }, nav: true }),
+              read("im-read", { page: "entity", tab: "partner" }, "partner-customers", "These customers send checks through Lloyds. All of them are affected."),
+            ],
           },
           {
             id: "s2-report",
-            doThis: ["Click **Report issue** on Home.", "Fill the form, following the hints.", "Click **Report issue**."],
-            target: ["report-issue-submit", "report-issue"],
             title: "Report the issue",
-            text: "From Home, use Report issue. Anyone at Corvane can report, and it takes under a minute. The hints next to the form show what to enter.",
+            text: "Anyone at Corvane can report an issue, and it takes under a minute.",
             ...LUKAS,
-            page: "home",
-            anchor: "home-issues",
             check: "data",
+            moves: [
+              goHome("rp-home"),
+              click("rp-open", HOME, "report-issue", "Click **Report issue**"),
+              type("rp-entity", HOME, "report-entity", "Type **Lloyds**.", "Lloyds"),
+              click("rp-entity-pick", HOME, "option~Lloyds Bank plc", "Pick **Lloyds Bank plc**"),
+              pick("rp-type", HOME, "report-type", "Pick **Partner degraded or unavailable**", "Partner degraded or unavailable", { sayOpen: "Open **Type**, then pick **Partner degraded or unavailable**." }),
+              pick("rp-coverage", HOME, "report-coverage-option~UK CoP / GB", "Pick **UK CoP / GB**", "UK CoP / GB"),
+              type("rp-desc", HOME, "report-description", "Summarise Paul's message in the description.", "Lloyds reports CoP responses timing out since this morning. Engineers investigating."),
+              pick("rp-reporter", HOME, "report-reporter", "Pick **Found by Corvane**", "Found by Corvane", { sayOpen: "Open **Reported at the customer by**, then pick **Found by Corvane**." }),
+              pick("rp-impact", HOME, "report-impact-option~Degraded", "Pick **Degraded**", "Degraded"),
+              pick("rp-breach", HOME, "report-breach-option~No", "Pick **No** for possible data breach.", "No"),
+              click("rp-submit", HOME, "report-issue-submit", "Click **Report issue**"),
+            ],
           },
           {
             id: "s2-degraded",
-            doThis: ["Click **Acknowledge** in **Your next action**.", "In the coverage banner, click **Set to Degraded**, then **Save status**."],
-            target: ["save-coverage-status", "next-action/acknowledge", "set-degraded"],
             title: "Acknowledge, then set to Degraded",
-            text: "Acknowledging starts the work. Degraded marks Lloyds on every customer that relies on it, and Affected customers lists each one with its own notice deadline.",
+            text: "Acknowledging starts the work. Degraded marks Lloyds on every customer that relies on it, and each one has its own notice deadline.",
             ...LUKAS,
-            page: "issue",
-            anchor: "affected-customers",
             check: "data",
+            moves: [
+              ...enterIssue("s2-degraded-in", "partner", "issue-row~@partner"),
+              click("dg-ack", issueAt("partner"), "next-action/acknowledge", "Click **Acknowledge**"),
+              click("dg-set", issueAt("partner"), "set-degraded", "Click **Set to Degraded**"),
+              click("dg-save", issueAt("partner"), "save-coverage-status", "Click **Save status**"),
+            ],
           },
           {
             id: "s2-linked",
-            doThis: ["In **Affected customers**, click **Create linked issues**.", "Click **Create**."],
-            target: ["create-linked-submit", "create-linked-issues"],
             title: "Create linked issues",
             text: "One issue per affected customer, each with its own communicator. Every customer hears from one person who already knows them.",
             ...LUKAS,
-            page: "issue",
-            anchor: "linked-issues",
             check: "data",
+            moves: [
+              ...enterIssue("s2-linked-in", "partner", "issue-row~@partner"),
+              click("ln-open", issueAt("partner"), "create-linked-issues", "Click **Create linked issues**"),
+              click("ln-submit", issueAt("partner"), "create-linked-submit", "Click **Create**"),
+            ],
           },
           {
             id: "s2-notify",
-            doThis: ["On Home, click the row that says **Notify Revolut Ltd**.", "In the message panel, click **Record notification**.", "Choose the **Channel** and click **Record notification**."],
-            target: ["record-communication-submit", "record-communication", "issue-row~Notify Revolut Ltd"],
             title: "Notify Revolut Ltd as Adrian Koh",
-            text: "Switch to Adrian. His Home shows Notify Revolut Ltd with the time left. Record the notification and the deadline clears.",
+            text: "Adrian is the person Revolut knows. His Home shows Revolut Ltd waiting for a notice, with the time left, and recording it clears the deadline.",
             ...ADRIAN,
-            page: "home",
-            anchor: "home-issues",
             check: "data",
+            moves: [
+              goHome("nt-home"),
+              click("nt-row", HOME, "issue-row~Notify Revolut Ltd", "Click the **Notify Revolut Ltd** row", { doneWhen: "route", arrive: issueAt("revolut"), nav: true }),
+              click("nt-open", issueAt("revolut"), "record-communication", "Click **Record notification**"),
+              channel("nt-channel", issueAt("revolut")),
+              click("nt-submit", issueAt("revolut"), "record-communication-submit", "Click **Record notification**"),
+            ],
           },
           {
             id: "s2-resolve",
-            doThis: ["Click **Resolve** in **Your next action**.", "Fill **Root cause**, **Solution** and the event time, then click **Resolve issue**.", "Click **Resolve** in the dialog."],
-            target: ["resolve-cascade-submit", "resolve-submit", "next-action/resolve"],
             title: "Resolve once, as Lukas",
             text: "Paul confirms the fix. Lukas resolves the partner issue, and every linked issue resolves with it.",
             ...LUKAS,
-            page: "issue",
-            anchor: "linked-issues",
             check: "data",
+            moves: [
+              goHome("rs-home"),
+              click("rs-row", HOME, "issue-row~@partner", "Click the partner issue row", { doneWhen: "route", arrive: issueAt("partner"), nav: true }),
+              click("rs-open", issueAt("partner"), "next-action/resolve", "Click **Resolve**"),
+              type("rs-cause", issueAt("partner"), "resolve-root-cause", "Write the root cause.", "Lloyds CoP gateway overloaded after a configuration change on their side."),
+              type("rs-solution", issueAt("partner"), "resolve-solution", "Write the solution.", "Lloyds rolled back the change. Response times are back under one second."),
+              type("rs-event-date", issueAt("partner"), "resolve-event-date", "Set the event date.", EVENT_DATE_TOKEN, { optional: true }),
+              type("rs-event-time", issueAt("partner"), "resolve-event-time", "Set the event time.", EVENT_TIME_TOKEN, { optional: true }),
+              click("rs-submit", issueAt("partner"), "resolve-submit", "Click **Resolve issue**"),
+              click("rs-cascade", issueAt("partner"), "resolve-cascade-submit", "Click **Resolve** to confirm."),
+            ],
           },
         ],
         end: { text: "One report, every affected customer told by their own contact, one resolution.", actions: ["built"] },
@@ -410,14 +464,6 @@ export function doneFromData(state: OnboardingState | null): Record<string, bool
     "s2-notify": s2.revolutNotified,
     "s2-resolve": s2.resolved,
   };
-}
-
-/** The page a step opens, or null when its issue or entity does not exist yet. */
-export function stepHref(step: ScenarioStep, scenario: ScenarioId, state: OnboardingState | null): string | null {
-  if (step.page === "home") return "/";
-  if (step.page === "entity") return state?.scenario2.partnerEntityId ? `/entities/${state.scenario2.partnerEntityId}/partner` : null;
-  const issueId = scenario === 1 ? state?.scenario1.issueId : state?.scenario2.issueId;
-  return issueId ? `/issues/${issueId}` : null;
 }
 
 export type NoteKey = "next-action" | "time-column" | "action-plan" | "owner-communicator" | "linked-issues";
@@ -468,9 +514,4 @@ export function parseTarget(raw: string): TargetSpec {
   const [path, text] = raw.split("~");
   const slash = path.indexOf("/");
   return { scope: slash === -1 ? null : path.slice(0, slash), name: slash === -1 ? path : path.slice(slash + 1), text: text ?? null };
-}
-
-/** "Click here" for a step that is done by clicking, "Read this" for one that is done by looking. */
-export function targetTag(step: Pick<ScenarioStep, "check">): string {
-  return step.check === "viewed" ? "Read this" : "Click here";
 }

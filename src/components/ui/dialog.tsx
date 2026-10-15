@@ -75,7 +75,7 @@ DialogBody.displayName = "DialogBody";
  */
 function DialogFooter({ className, reason, children, ...props }: React.HTMLAttributes<HTMLDivElement> & { reason?: string | null }) {
   return (
-    <div className={cn("flex items-center justify-end gap-2 border-t border-border px-6 pb-5 pt-4", className)} {...props}>
+    <div data-onboarding="dialog-footer" className={cn("flex items-center justify-end gap-2 border-t border-border px-6 pb-5 pt-4", className)} {...props}>
       {reason && (
         <span data-testid="dialog-blocked-reason" className="mr-auto min-w-0 text-meta text-text-secondary">
           {reason}
