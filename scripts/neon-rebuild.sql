@@ -31,7 +31,7 @@ DROP SCHEMA IF EXISTS public CASCADE;
 CREATE SCHEMA public;
 GRANT USAGE ON SCHEMA public TO hub_app;
 
--- 2. The migrations, in order: 20261010000000_baseline, 20261014093351_demo_meta_idle_restore
+-- 2. The migrations, in order: 20261010000000_baseline, 20261014093351_demo_meta_idle_restore, 20261015090000_demo_sandbox
 -- Migration 20261010000000_baseline
 -- Baseline: the whole schema in one migration (replaces the earlier migration history).
 -- Part 0 is the issue number sequence, which Issue.number defaults to.
@@ -1532,6 +1532,42 @@ ALTER TABLE "ObligationCard"
 ALTER TABLE "DemoMeta" ADD COLUMN     "lastRestoreAt" TIMESTAMPTZ(3),
 ADD COLUMN     "lastWriteAt" TIMESTAMPTZ(3);
 
+-- Migration 20261015090000_demo_sandbox
+-- sandbox:skip
+-- The registry of per-visitor sandboxes. It lives in the public schema only: scripts/sandbox-ddl-lib.ts leaves every migration that starts
+-- with the line above out of the DDL it copies into a visitor's schema.
+
+-- CreateEnum
+CREATE TYPE "DemoSandboxStatus" AS ENUM ('SPARE', 'ASSIGNED');
+
+-- CreateTable
+CREATE TABLE "DemoSandbox" (
+    "schemaName" TEXT NOT NULL,
+    "status" "DemoSandboxStatus" NOT NULL,
+    "createdAt" TIMESTAMPTZ(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "assignedAt" TIMESTAMPTZ(3),
+    "expiresAt" TIMESTAMPTZ(3) NOT NULL,
+    "ddlHash" TEXT NOT NULL,
+    "snapshotHash" TEXT NOT NULL,
+
+    CONSTRAINT "DemoSandbox_pkey" PRIMARY KEY ("schemaName"),
+    CONSTRAINT "DemoSandbox_schemaName_format" CHECK ("schemaName" ~ '^sbx_[0-9a-f]{16}$')
+);
+
+-- CreateIndex
+CREATE INDEX "DemoSandbox_status_ddlHash_snapshotHash_idx" ON "DemoSandbox"("status", "ddlHash", "snapshotHash");
+
+-- CreateIndex
+CREATE INDEX "DemoSandbox_expiresAt_idx" ON "DemoSandbox"("expiresAt");
+
+-- The app reads the registry on the runtime connection (is this visitor's sandbox still valid?); every write goes through the admin connection.
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'hub_app') THEN
+    GRANT SELECT ON "DemoSandbox" TO hub_app;
+  END IF;
+END $$;
+
 -- 3. Prisma's migration history: every migration above is recorded as applied, so `prisma migrate status` finds nothing pending.
 CREATE TABLE "_prisma_migrations" (
     "id" VARCHAR(36) NOT NULL,
@@ -1547,7 +1583,8 @@ CREATE TABLE "_prisma_migrations" (
 INSERT INTO "_prisma_migrations" ("id", "checksum", "finished_at", "migration_name", "applied_steps_count")
 VALUES
     ('00000000-0000-4000-8000-000000000001', 'e4050fbb5a1e725c1afc1ae2fbc89a9e744e2f991616f7e56a0e27e99d70e986', now(), '20261010000000_baseline', 1),
-    ('00000000-0000-4000-8000-000000000002', 'f44bf843cf97cc6bc56dd79d1063ce267f3b547d28f53cfd3b31ff88295b74a8', now(), '20261014093351_demo_meta_idle_restore', 1);
+    ('00000000-0000-4000-8000-000000000002', 'f44bf843cf97cc6bc56dd79d1063ce267f3b547d28f53cfd3b31ff88295b74a8', now(), '20261014093351_demo_meta_idle_restore', 1),
+    ('00000000-0000-4000-8000-000000000003', 'aa38a44190ee93a0f93fe6fbead096a2dc599785714d649a54bd8fdbb24daf94', now(), '20261015090000_demo_sandbox', 1);
 
 -- 4. The runtime role's grants (prisma/grants.sql, unchanged).
 -- Brief 3.2.3. Run by scripts/db-reset.ts after migrations, as hub_owner.

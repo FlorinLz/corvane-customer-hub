@@ -53,11 +53,11 @@ describe("which routes are exempt from counting as writes", () => {
     return readdirSync(dir, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? routeFiles(join(dir, e.name)) : e.name === "route.ts" ? [join(dir, e.name)] : []));
   }
 
-  it("only the five POST routes that read, or only set a cookie, opt out", () => {
+  it("only the seven POST routes that read, set a cookie, or restore a sandbox (which has no idle clock) opt out", () => {
     const optedOut = routeFiles("src/app/api")
       .filter((f) => /writes:\s*false/.test(readFileSync(f, "utf-8")))
       .map((f) => f.replace("src/app/api/", ""))
       .sort();
-    expect(optedOut).toEqual(["demo/prepare/route.ts", "demo/view-as/route.ts", "duplicates/check/route.ts", "entities/[id]/issues/similar/route.ts", "gleif/lookup/route.ts"]);
+    expect(optedOut).toEqual(["demo/prepare/route.ts", "demo/sandbox/route.ts", "demo/start-over/route.ts", "demo/view-as/route.ts", "duplicates/check/route.ts", "entities/[id]/issues/similar/route.ts", "gleif/lookup/route.ts"]);
   });
 });

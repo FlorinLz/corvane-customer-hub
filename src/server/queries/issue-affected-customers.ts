@@ -1,4 +1,4 @@
-import type { IssueStatus, IssueType, Scheme, Severity, Stage, Team } from "@prisma/client";
+import type { IssueStatus, IssueType, Scheme, Severity, Stage } from "@prisma/client";
 
 import { db } from "@/server/db";
 import { isLive, loadCoverageCustomers } from "@/server/queries/coverage-customers";

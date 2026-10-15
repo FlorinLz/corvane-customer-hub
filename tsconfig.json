@@ -45,7 +45,9 @@
     ".next-e2e-skew/types/**/*.ts",
     ".next-e2e-skew/dev/types/**/*.ts",
     ".next-e2e-roles/types/**/*.ts",
-    ".next-e2e-roles/dev/types/**/*.ts"
+    ".next-e2e-roles/dev/types/**/*.ts",
+    ".next-e2e-sandbox/types/**/*.ts",
+    ".next-e2e-sandbox/dev/types/**/*.ts"
   ],
   "exclude": [
     "node_modules"

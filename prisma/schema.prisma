@@ -1355,3 +1355,23 @@ model DemoMeta {
   lastWriteAt   DateTime? @db.Timestamptz(3) // the last data write by any visitor since the last restore; null = nothing changed since then
   lastRestoreAt DateTime? @db.Timestamptz(3) // when the data was last restored; a visitor whose ch_arrival is older gets a new one
 }
+
+/// The registry of per-visitor sandboxes (one Postgres schema each, sbx_ plus 16 hex characters). Public schema only; the app reads and writes it with
+/// plain SQL on the pg pool (src/server/sandbox.ts), never through a sandbox-scoped client.
+model DemoSandbox {
+  schemaName   String            @id // sbx_<16 hex>, generated on the server only
+  status       DemoSandboxStatus
+  createdAt    DateTime          @default(now()) @db.Timestamptz(3)
+  assignedAt   DateTime?         @db.Timestamptz(3)
+  expiresAt    DateTime          @db.Timestamptz(3) // arrival + 24 h once assigned
+  ddlHash      String
+  snapshotHash String
+
+  @@index([status, ddlHash, snapshotHash])
+  @@index([expiresAt])
+}
+
+enum DemoSandboxStatus {
+  SPARE
+  ASSIGNED
+}

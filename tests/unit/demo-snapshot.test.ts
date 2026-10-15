@@ -69,7 +69,7 @@ describe("restoring the snapshot", () => {
 
   it("covers every data table and gives the same row counts as the snapshot", async () => {
     const tables = (await scratch.$queryRaw<{ tablename: string }[]>`SELECT tablename FROM pg_tables WHERE schemaname = 'public'`).map((r) => r.tablename);
-    const data = tables.filter((t) => !["DemoMeta", "_prisma_migrations"].includes(t)).sort();
+    const data = tables.filter((t) => !["DemoMeta", "DemoSandbox", "_prisma_migrations"].includes(t)).sort();
     expect(demoSnapshot.tables.map((t) => t.name).sort(), "a table is missing from the snapshot: run `npm run demo:snapshot`").toEqual(data);
 
     const version = await restoreFromSnapshot(scratchUrl);

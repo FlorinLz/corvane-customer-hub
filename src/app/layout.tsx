@@ -8,7 +8,7 @@ import { PreparingDemo } from "@/components/shell/PreparingDemo";
 import { TopBar } from "@/components/shell/TopBar";
 import { Toaster } from "@/components/ui/toaster";
 import { now } from "@/lib/dates";
-import { demoNeedsPreparing } from "@/server/demo-gate";
+import { demoGate } from "@/server/demo-gate";
 import { getCurrentUser } from "@/server/session";
 import "@/server/request-clock"; // registers the per-visitor clock for now() on the server
 
@@ -45,14 +45,16 @@ export const metadata: Metadata = {
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const demoMode = process.env.DEMO_MODE === "true";
 
-  // Idle restore (src/server/demo-idle.ts): when the demo is due for a restore, a restore is running, or this visitor arrived before the
+  // Sandbox (src/server/sandbox.ts): a visitor without a valid private copy of the demo is sent through the same screen until they have one.
+  // Idle restore (src/server/demo-idle.ts), for the shared demo: when the demo is due for a restore, a restore is running, or this visitor arrived before the
   // last one, nothing of the app renders (its queries would hit tables mid-restore) until the "Preparing a fresh demo..." screen has
   // waited for it.
-  if (await demoNeedsPreparing()) {
+  const gate = await demoGate();
+  if (gate.preparing) {
     return (
       <html lang="en-GB" className={`${dmSans.variable} ${dmMono.variable}`}>
         <body className="flex min-h-full flex-col bg-background text-text" suppressHydrationWarning>
-          <PreparingDemo />
+          <PreparingDemo sandbox={gate.preparing === "sandbox"} />
         </body>
       </html>
     );
@@ -67,7 +69,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       <body className="flex min-h-full flex-col bg-background text-text" suppressHydrationWarning>
         <script dangerouslySetInnerHTML={{ __html: `window.__chClockOffsetMs=${serverNowMs}-Date.now()` }} />
         {demoMode && <MobileNotice />}
-        {demoMode && <DemoStrip currentEmail={user.email} serverNow={now()} />}
+        {demoMode && <DemoStrip currentEmail={user.email} serverNow={now()} sandbox={gate.sandbox} shared={gate.shared} />}
         <TopBar user={user} />
         <main className="mx-auto w-full max-w-[1440px] flex-1 px-6 py-6">
           {children}

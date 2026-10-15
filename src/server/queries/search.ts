@@ -1,6 +1,7 @@
 import type { LeiStatus, LifecycleState, EntityType, Team, Scheme } from "@prisma/client";
 
 import { db } from "@/server/db";
+import { withSearchPath } from "@/server/sql";
 import { today } from "@/lib/dates";
 import { normaliseSearch } from "@/lib/validation/normalise";
 
@@ -47,7 +48,7 @@ export async function runSearch(filters: SearchFilters): Promise<{ rows: SearchR
   const hasCountryOrScheme = filters.countries.length > 0 || filters.schemes.length > 0;
   const todayStr = today();
 
-  const idRows = await db.$queryRaw<
+  const idRows = await withSearchPath(db, (tx) => tx.$queryRaw<
     { id: string; rank: number | null; matched_alias: string | null; prod_match: boolean; cov_match: boolean; coverage_chip: string | null; total: bigint }[]
   >`
     WITH matched AS (
@@ -125,7 +126,7 @@ export async function runSearch(filters: SearchFilters): Promise<{ rows: SearchR
       CASE WHEN ${hasQuery} THEN rank ELSE 999 END ASC,
       lower(legal_name) ASC
     LIMIT ${PAGE_SIZE} OFFSET ${(filters.page - 1) * PAGE_SIZE}
-  `;
+  `);
 
   const total = idRows.length > 0 ? Number(idRows[0].total) : 0;
   if (idRows.length === 0) return { rows: [], total: 0 };

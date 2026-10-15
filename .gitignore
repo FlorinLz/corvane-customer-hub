@@ -12,6 +12,7 @@ node_modules/
 .next-e2e-zones/
 .next-e2e-skew/
 .next-e2e-roles/
+.next-e2e-sandbox/
 out/
 
 # Playwright
