@@ -148,7 +148,7 @@ export const SCENARIOS: Record<ScenarioId, Scenario> = {
           {
             id: "s1-home",
             title: "Start on Home as Emma Wilson",
-            text: "Emma speaks for Corvane to MPS. ISS-1042 sits at the top of her Home, with her next action and the time left to do it.",
+            text: "Emma speaks for Corvane to MPS. ISS-1042 is at the top of her Home, and Next actions shows who it waits on: Kevin, still investigating.",
             ...EMMA,
             page: "home",
             anchor: "home-issues",
@@ -158,7 +158,7 @@ export const SCENARIOS: Record<ScenarioId, Scenario> = {
           {
             id: "s1-issue",
             title: "Open ISS-1042",
-            text: "Your next action says what Emma does now. The Action plan shows the night in process order: the alert, Kevin's acknowledgement 9 minutes later, the customer told within the hour.",
+            text: "Your next action shows Emma has nothing due and names who is next. The Action plan shows the night in process order: the alert, Kevin's acknowledgement 9 minutes later, the customer told within the hour.",
             ...EMMA,
             page: "issue",
             anchor: "action-plan",
@@ -177,7 +177,7 @@ export const SCENARIOS: Record<ScenarioId, Scenario> = {
           {
             id: "s1-compliance",
             title: "Look at the Compliance card",
-            text: "MPS is a bank under DORA. Mei Chen in Compliance flagged a possible major incident: MPS may have to report it to its regulator and needs the facts from Corvane within 2 hours.",
+            text: "MPS is a bank under DORA, so ISS-1042 is flagged for Compliance. Mei Chen assessed it as a possible major incident: MPS may have to report it to its regulator and needs the facts from Corvane within 2 hours, as Customer obligations shows.",
             ...EMMA,
             page: "issue",
             anchor: "compliance-card",
@@ -186,7 +186,7 @@ export const SCENARIOS: Record<ScenarioId, Scenario> = {
           {
             id: "s1-update",
             title: "Send the Update",
-            text: "Send Silvia an Update from the message panel, then record it. The log and Emma's next action change at once.",
+            text: "Send Silvia an Update from the message panel, then record it. The Communication log shows it at once, with Emma's name and the time.",
             ...EMMA,
             page: "issue",
             anchor: "message-panel",
@@ -209,7 +209,7 @@ export const SCENARIOS: Record<ScenarioId, Scenario> = {
           {
             id: "s1b-resolve",
             title: "Resolve as Kevin Lim",
-            text: "Switch to Kevin with View as. As owner he resolves ISS-1042. Watch the Action plan: the report steps open, each with its person and deadline.",
+            text: "Switch to Kevin with View as. As owner he resolves ISS-1042. Watch the Action plan: the report steps appear, each with its person and deadline.",
             ...KEVIN,
             page: "issue",
             anchor: "action-plan",
@@ -280,8 +280,8 @@ export const SCENARIOS: Record<ScenarioId, Scenario> = {
           {
             id: "s2-impact",
             title: "Check who depends on Lloyds",
-            // The real page: the Partner tab's UK CoP / GB coverage. No page lists the dependent customers by name (reported in the PR).
-            text: "As Lukas, open the Lloyds Partner tab. UK CoP / GB is Active, and every customer that sends UK CoP checks through Lloyds depends on it. These are the customers waiting on Lukas.",
+            // The Partner tab's UK CoP / GB card lists the customers on that coverage (the rule shared with Affected customers).
+            text: "As Lukas, open the Lloyds Partner tab. UK CoP / GB lists every customer that sends its checks through Lloyds. These are the customers waiting on Lukas.",
             ...LUKAS,
             page: "entity",
             anchor: "partner-customers",

@@ -254,7 +254,11 @@ test.describe("scenario 1: the night Sev-1", () => {
     const share = page.getByRole("dialog", { name: "Share draft of the root cause report" });
     await expect(hint).toContainText("For example https://docs.corvane-internal.example/reports/");
     const link = ((await hint.innerText()).match(/https:\/\/\S+/) ?? [""])[0];
-    await share.getByLabel("Draft link *").fill(link);
+    // The one hint that fills a field: the link, and only the link.
+    await expect(share.getByLabel("Draft link *")).toHaveValue("");
+    await hint.getByRole("button", { name: "Use example link" }).click();
+    await expect(share.getByLabel("Draft link *")).toHaveValue(link);
+    await expect(share.getByLabel("Summary *")).toHaveValue("");
     await share.getByLabel("Summary *").fill("Cause: the certificate expired. Impact: every MPS name check failed. Fix: a renewed certificate and a repaired rotation job.");
     await share.getByRole("button", { name: "Share draft" }).click();
     await expect(page.getByText("Draft shared", { exact: true })).toBeVisible();
@@ -283,6 +287,10 @@ test.describe("scenario 1: the night Sev-1", () => {
     await expect(end).toContainText(chapterOf("1b").end.text);
     await expect(end.getByRole("link", { name: "See how it was built" })).toHaveAttribute("href", START_HERE_URL);
     await expect(end.getByRole("button", { name: CONTINUE_LABEL })).toHaveCount(0);
+    // "Nothing is left on anyone's Home": a closed issue is on nobody's list.
+    await page.goto("/");
+    await expect(page.locator("#worklist-issues")).toBeVisible();
+    await expect(page.getByTestId(`issue-row-${iss.id}`)).toHaveCount(0);
   });
 
   test("Report issue hints show only while scenario 2's Report issue step is open, and never fill a field", async ({ page }) => {
@@ -368,8 +376,19 @@ test.describe("scenario 2 and the Why this? notes", () => {
     await expect.poll(() => viewingAs(page)).toContain("Lukas Brenner");
     const lloyds = await db.entity.findFirstOrThrow({ where: { legalName: "Lloyds Bank plc" } });
     await expect(page).toHaveURL(new RegExp(`/entities/${lloyds.id}/partner$`));
-    await expect(page.locator('[data-onboarding="partner-customers"]')).toBeInViewport();
+    const card = page.locator('[data-onboarding="partner-customers"]');
+    await expect(card).toBeInViewport();
     await expect(steps.nth(0)).toHaveAttribute("data-done", "true", { timeout: 15_000 });
+    // The card lists the customers on UK CoP / GB, the same ones Affected customers lists on the partner issue.
+    const list = card.getByTestId("coverage-customers");
+    await expect(list).toContainText(/Customers on this coverage \(\d+\)/);
+    await expect(list.getByRole("link", { name: "Revolut Ltd" })).toHaveAttribute("href", /\/entities\/.+\/overview/);
+    const listed = Number((await list.innerText()).match(/Customers on this coverage \((\d+)\)/)![1]);
+    await page.goto(`/issues/${fx.parentId}`);
+    await expect(page.locator('[data-onboarding="affected-customers"]')).toContainText(`Affected customers (${listed})`);
+    await page.goBack();
+    await expect(card).toBeAttached();
+    await expect(steps.nth(0)).toHaveAttribute("data-done", "true", { timeout: 15_000 }); // remembered
     await page.goto("/");
     await page.getByRole("button", { name: "Report issue" }).click();
     await expect(page.getByRole("dialog", { name: "Report issue" }).getByRole("combobox", { name: "Affected entity *" })).toBeVisible();

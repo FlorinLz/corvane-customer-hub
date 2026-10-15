@@ -1,7 +1,7 @@
 import type { IssueStatus, IssueType, Scheme, Severity, Stage, Team } from "@prisma/client";
 
 import { db } from "@/server/db";
-import { STAGE_ORDER } from "@/lib/labels";
+import { isLive, loadCoverageCustomers } from "@/server/queries/coverage-customers";
 import { addBusinessMinutes, teamCalendar, userCalendar } from "@/lib/business-hours";
 import { ISSUE_OPEN_FOR_SIMILAR, NOTIFY_TARGET_SEV1_DEFAULT_HOURS, NOTIFY_TARGET_SEV2_BUSINESS_MINUTES } from "@/server/config";
 
@@ -10,8 +10,6 @@ import { ISSUE_OPEN_FOR_SIMILAR, NOTIFY_TARGET_SEV1_DEFAULT_HOURS, NOTIFY_TARGET
 // customer owner directly (Entity.ownerId), per AC5's own wording, not
 // effectiveCommunicator() (which would also apply the hand-over rule --
 // not relevant since these rows describe a not-yet-created issue).
-
-const LIVE_STAGE_INDEX = STAGE_ORDER.indexOf("LIVE_HYPERCARE");
 
 interface ProductLineRef {
   id: string;
@@ -42,41 +40,21 @@ export interface AffectedCustomersResult {
 }
 
 export async function loadAffectedCustomers(parentIssueId: string, scheme: Scheme, country: string, severity: Severity, awareAt: Date): Promise<AffectedCustomersResult> {
-  const lines = await db.contractedProduct.findMany({
-    where: { product: scheme, country, cancelledAt: null, entity: { deletedAt: null, lifecycleState: { not: "INACTIVE" }, customerRole: { active: true } } },
-    select: { id: true, stage: true, entityId: true, entity: { select: { id: true, legalName: true, ownerId: true, owner: { select: { id: true, name: true, timeZone: true, team: true } } } } },
-  });
-
   const existingLinks = await db.issueLink.findMany({
     where: { parentId: parentIssueId, unlinkedAt: null },
     select: { childId: true, child: { select: { id: true, number: true, status: true, entityId: true } } },
   });
   const linkByEntity = new Map(existingLinks.map((l) => [l.child.entityId, l.child]));
 
-  const byEntity = new Map<string, { entityId: string; entityName: string; ownerId: string | null; ownerName: string | null; ownerTz: string | null; ownerTeam: Team | null; lines: { id: string; stage: Stage }[] }>();
-  for (const line of lines) {
-    const existing = byEntity.get(line.entityId);
-    if (existing) {
-      existing.lines.push({ id: line.id, stage: line.stage });
-    } else {
-      byEntity.set(line.entityId, {
-        entityId: line.entityId,
-        entityName: line.entity.legalName,
-        ownerId: line.entity.ownerId,
-        ownerName: line.entity.owner?.name ?? null,
-        ownerTz: line.entity.owner?.timeZone ?? null,
-        ownerTeam: line.entity.owner?.team ?? null,
-        lines: [{ id: line.id, stage: line.stage }],
-      });
-    }
-  }
+  // Who uses this scheme and country: the one shared rule (coverage-customers.ts).
+  const byEntity = await loadCoverageCustomers(scheme, country);
 
   const affected: AffectedCustomerRow[] = [];
   const beforeGoLive: AffectedCustomersResult["beforeGoLive"] = [];
 
-  for (const row of byEntity.values()) {
-    const liveLines = row.lines.filter((l) => STAGE_ORDER.indexOf(l.stage) >= LIVE_STAGE_INDEX);
-    const earlyLines = row.lines.filter((l) => STAGE_ORDER.indexOf(l.stage) < LIVE_STAGE_INDEX);
+  for (const row of byEntity) {
+    const liveLines = row.lines.filter(isLive);
+    const earlyLines = row.lines.filter((l) => !isLive(l));
     if (earlyLines.length > 0 && liveLines.length === 0) {
       beforeGoLive.push({ entityId: row.entityId, entityName: row.entityName, productLines: earlyLines.map((l) => ({ id: l.id, scheme, country, stage: l.stage })) });
       continue;

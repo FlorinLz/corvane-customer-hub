@@ -11,6 +11,9 @@ import { daysBetween, formatDate, toLocalDate, today } from "@/lib/dates";
 import { CONNECTION_METHOD_LABELS, ownedByLabel, SCHEME_LABELS } from "@/lib/labels";
 import { coverageStatusLabel, coverageStatusVariant } from "@/lib/ui/status";
 import { can } from "@/server/permissions/can";
+import { CoverageCustomers, type CoverageCustomerRow } from "@/components/entity/partner/CoverageCustomers";
+import { STAGE_ORDER } from "@/lib/labels";
+import { loadLiveCoverageCustomers } from "@/server/queries/coverage-customers";
 import { loadPartnerData, type PartnerData } from "@/server/queries/partner";
 import { getCurrentUser } from "@/server/session";
 
@@ -37,7 +40,7 @@ function ConnectionMethodCard({ data }: { data: PartnerData }) {
   );
 }
 
-function CoverageTableRow({ row, canEdit }: { row: CoverageRow; canEdit: boolean }) {
+function CoverageTableRow({ row, canEdit, customers }: { row: CoverageRow; canEdit: boolean; customers?: CoverageCustomerRow[] }) {
   const since = row.current ? toLocalDate(row.current.effectiveDate) : null;
   const daysInStatus = since ? daysBetween(since, today()) : null;
   return (
@@ -79,11 +82,12 @@ function CoverageTableRow({ row, canEdit }: { row: CoverageRow; canEdit: boolean
           ))}
         </div>
       </details>
+      {customers && <CoverageCustomers customers={customers} />}
     </div>
   );
 }
 
-function SchemeGroup({ scheme, rows, canEdit }: { scheme: Scheme; rows: CoverageRow[]; canEdit: boolean }) {
+function SchemeGroup({ scheme, rows, canEdit, customers }: { scheme: Scheme; rows: CoverageRow[]; canEdit: boolean; customers: Record<string, CoverageCustomerRow[]> }) {
   if (rows.length === 0) return null;
   return (
     // The guided scenario's impact step looks at the UK CoP coverage (data-onboarding anchor).
@@ -94,7 +98,7 @@ function SchemeGroup({ scheme, rows, canEdit }: { scheme: Scheme; rows: Coverage
       </div>
       <div>
         {rows.map((r) => (
-          <CoverageTableRow key={r.id} row={r} canEdit={canEdit} />
+          <CoverageTableRow key={r.id} row={r} canEdit={canEdit} customers={customers[r.id]} />
         ))}
       </div>
     </Card>
@@ -110,6 +114,14 @@ export default async function PartnerPage({ params }: { params: Promise<{ id: st
   const schemes: Scheme[] = [Scheme.EU_VOP, Scheme.UK_COP, Scheme.GLOBAL_VALIDATION];
   const active = data.coverageRows.filter((r) => r.current?.status !== "RETIRED");
   const retired = data.coverageRows.filter((r) => r.current?.status === "RETIRED");
+  // Customers on each active coverage: the same rule as "Affected customers" on a partner issue (coverage-customers.ts).
+  const customers: Record<string, CoverageCustomerRow[]> = {};
+  await Promise.all(
+    active.map(async (r) => {
+      const live = await loadLiveCoverageCustomers(r.scheme, r.country);
+      customers[r.id] = live.map((c) => ({ entityId: c.entityId, entityName: c.entityName, stage: c.lines.map((l) => l.stage).sort((a, b) => STAGE_ORDER.indexOf(b) - STAGE_ORDER.indexOf(a))[0] }));
+    }),
+  );
 
   return (
     <div className="flex flex-col gap-4">
@@ -134,7 +146,7 @@ export default async function PartnerPage({ params }: { params: Promise<{ id: st
           {active.length === 0 ? (
             <p className="text-meta text-text-secondary">No coverage recorded yet.</p>
           ) : (
-            schemes.map((s) => <SchemeGroup key={s} scheme={s} rows={active.filter((r) => r.scheme === s)} canEdit={canEdit} />)
+            schemes.map((s) => <SchemeGroup key={s} scheme={s} rows={active.filter((r) => r.scheme === s)} canEdit={canEdit} customers={customers} />)
           )}
 
           {retired.length > 0 && (

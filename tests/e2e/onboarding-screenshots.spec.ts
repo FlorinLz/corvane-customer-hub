@@ -92,12 +92,27 @@ test("screenshots", async ({ page, request }) => {
   await page.evaluate(() => window.scrollTo(0, 0));
   await shot("1b-half-way.png");
 
+  // Share draft with its hint.
+  await page.getByRole("region", { name: "Your next action" }).getByRole("button", { name: "Share draft" }).click();
+  await expect(page.locator('[data-onboarding-hint="draft-link"]')).toBeVisible();
+  await shot("1b-share-draft-hint.png");
+  await page.keyboard.press("Escape");
+
   // Scenario 2: prologue and signal card.
   await panel.getByRole("button", { name: "Switch to scenario 2" }).click();
   await expect(panel.locator('[data-onboarding="signal-card"]')).toBeVisible();
   await panel.evaluate((el) => (el.scrollTop = 0));
   await page.evaluate(() => window.scrollTo(0, 0));
   await shot("2-prologue-signal.png");
+
+  // The Lloyds Partner tab with its customers, as Lukas, the panel on step 1.
+  await step("s2-impact").getByRole("button", { name: "Take me there" }).click();
+  await viewing(page, "Lukas Brenner");
+  await expect(page.getByTestId("coverage-customers").first()).toBeVisible();
+  await expect(step("s2-impact")).toHaveAttribute("data-done", "true", { timeout: 20_000 });
+  await panel.evaluate((el) => (el.scrollTop = 0));
+  await page.waitForTimeout(800);
+  await shot("2-lloyds-partner-customers.png");
 
   // The Report issue drawer with its hints.
   await signInAs(page, EMAIL.lukas);

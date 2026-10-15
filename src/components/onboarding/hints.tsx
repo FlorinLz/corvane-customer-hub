@@ -42,7 +42,7 @@ export function useScenarioHints(): ScenarioHints {
 export const REPORT_HINTS = {
   entity: "Lloyds Bank plc",
   type: "Partner degraded or unavailable",
-  coverage: "UK CoP, GB",
+  coverage: "UK CoP / GB",
   description: "Summarise Paul's message",
   aware: "Leave it at now",
 } as const;
@@ -54,21 +54,35 @@ export function ReportHint({ field }: { field: ReportHintField }) {
   const { report } = useScenarioHints();
   if (!report) return null;
   return (
-    <p data-onboarding-hint={field} className="flex items-center gap-1 text-meta italic text-link-text">
-      <Lightbulb className="size-3.5 shrink-0" aria-hidden />
+    <p data-onboarding-hint={field} className="flex items-center gap-1 text-meta text-text-secondary">
+      <Lightbulb className="size-3.5 shrink-0 text-link-text" aria-hidden />
       {REPORT_HINTS[field]}
     </p>
   );
 }
 
-/** An example link on the approved document host for the draft: the field accepts nothing else. */
-export function DraftHint() {
+/** The example link on the approved document host: the field accepts nothing else. */
+export function exampleDraftLink(): string {
+  return `https://${approvedDocHosts()[0]}/reports/iss-1042-draft.pdf`;
+}
+
+/**
+ * Under the Share draft link field while chapter 2's share step is open: the example, and a button that puts it in the field. The only hint
+ * that fills a field; the summary stays for the visitor to write.
+ */
+export function DraftHint({ onUse }: { onUse: (link: string) => void }) {
   const { draft } = useScenarioHints();
   if (!draft) return null;
+  const link = exampleDraftLink();
   return (
-    <p data-onboarding-hint="draft-link" className="flex items-center gap-1 text-meta italic text-link-text">
-      <Lightbulb className="size-3.5 shrink-0" aria-hidden />
-      For example https://{approvedDocHosts()[0]}/reports/iss-1042-draft.pdf
+    <p data-onboarding-hint="draft-link" className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-meta text-text-secondary">
+      <span className="flex items-center gap-1">
+        <Lightbulb className="size-3.5 shrink-0 text-link-text" aria-hidden />
+        For example {link}
+      </span>
+      <button type="button" onClick={() => onUse(link)} className="text-link-text hover:underline">
+        Use example link
+      </button>
     </p>
   );
 }
