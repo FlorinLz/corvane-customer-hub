@@ -128,7 +128,7 @@ export function RecordCommunicationDialog({
         if (next) reset();
       }}
     >
-      <Button variant={triggerVariant} onClick={() => setOpen(true)}>{triggerLabel}</Button>
+      <Button data-onboarding="record-communication" variant={triggerVariant} onClick={() => setOpen(true)}>{triggerLabel}</Button>
       <DialogContent>
         <DialogHeader>Record notification</DialogHeader>
         <DialogBody>
@@ -220,7 +220,7 @@ export function RecordCommunicationDialog({
           <Button variant="secondary" onClick={() => setOpen(false)} disabled={pending}>
             Cancel
           </Button>
-          <Button disabled={!valid} disabledReason={blockedReason ?? undefined} aria-describedby={blockedReason ? "record-blocked-reason" : undefined} loading={pending} onClick={() => void save()}>
+          <Button data-onboarding="record-communication-submit" disabled={!valid} disabledReason={blockedReason ?? undefined} aria-describedby={blockedReason ? "record-blocked-reason" : undefined} loading={pending} onClick={() => void save()}>
             Record notification
           </Button>
         </DialogFooter>

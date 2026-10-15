@@ -104,3 +104,19 @@ html[data-onboarding-panel="open"] body {
 html[data-onboarding-panel="open"] [data-sonner-toaster][data-x-position="right"] {
   right: 376px;
 }
+
+/* The ring over a scenario step's target (src/components/onboarding/StepHighlight.tsx): a soft pulse, none when the visitor asks for less motion. */
+@keyframes ch-highlight-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-link-text) 45%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 6px color-mix(in srgb, var(--color-link-text) 0%, transparent);
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .ch-highlight {
+    animation: ch-highlight-pulse 1.8s ease-in-out infinite;
+  }
+}

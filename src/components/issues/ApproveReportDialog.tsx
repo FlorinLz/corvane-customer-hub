@@ -50,7 +50,7 @@ export function ApproveReportDialog({ issueId, displayId, entityName, triggerVar
         }
       }}
     >
-      <Button variant={triggerVariant} onClick={() => setOpen(true)}>
+      <Button data-onboarding="approve-report" variant={triggerVariant} onClick={() => setOpen(true)}>
         Approve report
       </Button>
       <DialogContent>
@@ -70,7 +70,7 @@ export function ApproveReportDialog({ issueId, displayId, entityName, triggerVar
           <Button variant="secondary" onClick={() => setOpen(false)} disabled={pending}>
             Cancel
           </Button>
-          <Button loading={pending} onClick={() => void save()}>
+          <Button data-onboarding="approve-report-submit" loading={pending} onClick={() => void save()}>
             Approve report
           </Button>
         </DialogFooter>

@@ -423,7 +423,7 @@ export function ReportIssueDrawer(props: Props) {
         else setTimeout(() => triggerRef.current?.focus(), 0); // Escape or Cancel: focus goes back to the button that opened the drawer
       }}
     >
-      <Button ref={triggerRef} variant="secondary" onClick={() => setOpen(true)} aria-label={props.mode === "home" ? "Report issue" : undefined}>
+      <Button ref={triggerRef} data-onboarding="report-issue" variant="secondary" onClick={() => setOpen(true)} aria-label={props.mode === "home" ? "Report issue" : undefined}>
         Report issue
       </Button>
       <DrawerContent width={640}>
@@ -717,7 +717,7 @@ export function ReportIssueDrawer(props: Props) {
           <Button variant="secondary" onClick={() => setOpen(false)} disabled={pending}>
             Cancel
           </Button>
-          <Button loading={pending} onClick={() => void submit()}>
+          <Button data-onboarding="report-issue-submit" loading={pending} onClick={() => void submit()}>
             Report issue
           </Button>
         </DialogFooter>

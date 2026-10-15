@@ -91,7 +91,7 @@ export function CloseDialog({ issueId, version, contacts, viewerZone, resolvedAt
         if (next) reset();
       }}
     >
-      <Button variant={triggerVariant} onClick={() => setOpen(true)}>{triggerLabel}</Button>
+      <Button data-onboarding="confirm-resolution" variant={triggerVariant} onClick={() => setOpen(true)}>{triggerLabel}</Button>
       <DialogContent>
         <DialogHeader>Confirm resolution</DialogHeader>
         <DialogBody>
@@ -165,7 +165,7 @@ export function CloseDialog({ issueId, version, contacts, viewerZone, resolvedAt
           <Button variant="secondary" onClick={() => setOpen(false)} disabled={pending}>
             Cancel
           </Button>
-          <Button disabled={!valid} disabledReason={blockedReason ?? undefined} aria-describedby={blockedReason ? "record-blocked-reason" : undefined} loading={pending} onClick={() => void save()}>
+          <Button data-onboarding="confirm-resolution-submit" disabled={!valid} disabledReason={blockedReason ?? undefined} aria-describedby={blockedReason ? "record-blocked-reason" : undefined} loading={pending} onClick={() => void save()}>
             Confirm resolution
           </Button>
         </DialogFooter>

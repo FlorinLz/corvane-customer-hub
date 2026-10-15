@@ -105,7 +105,7 @@ export function DegradedProposalBanner({
       <span className="flex-1 text-body">Coverage {schemeCountry} is {COVERAGE_STATUS_LABELS[proposal.status]}. Set it to Degraded?</span>
       {isNetwork && !notNow && (
         <>
-          <Button variant="secondary" onClick={() => setOpen(true)}>
+          <Button data-onboarding="set-degraded" variant="secondary" onClick={() => setOpen(true)}>
             Set to Degraded
           </Button>
           <Button variant="secondary" onClick={dismiss}>

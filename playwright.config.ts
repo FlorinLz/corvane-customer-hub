@@ -65,7 +65,7 @@ export default defineConfig({
     trace: "on-first-retry",
   },
   projects: [
-    { name: "chromium", use: { ...devices["Desktop Chrome"], storageState: dismissed(3000) }, testIgnore: [/onboarding(-screenshots)?\.spec\.ts$/, /(scenario5-issue-flow-short|seed-worklists-screenshots)\.spec\.ts$/, /(demo-clock-zones|visitor-clock)\.spec\.ts$/, /demo-clock-skew\.spec\.ts$/, /sandbox\.spec\.ts$/, /(role-actions(-screenshots)?|action-plan-order-screenshots|assess-after-resolve|root-cause-report(-screenshots)?|issue-v5-screenshots|issue-times(-screenshots)?|issue-sections(-screenshots)?|report-from-home(-screenshots)?|ux-polish(-screenshots)?|small-fixes-v7)\.spec\.ts$/] },
+    { name: "chromium", use: { ...devices["Desktop Chrome"], storageState: dismissed(3000) }, testIgnore: [/(onboarding(-screenshots)?|next-step(-screenshots)?)\.spec\.ts$/, /(scenario5-issue-flow-short|seed-worklists-screenshots)\.spec\.ts$/, /(demo-clock-zones|visitor-clock)\.spec\.ts$/, /demo-clock-skew\.spec\.ts$/, /sandbox\.spec\.ts$/, /(role-actions(-screenshots)?|action-plan-order-screenshots|assess-after-resolve|root-cause-report(-screenshots)?|issue-v5-screenshots|issue-times(-screenshots)?|issue-sections(-screenshots)?|report-from-home(-screenshots)?|ux-polish(-screenshots)?|small-fixes-v7)\.spec\.ts$/] },
     // Brief 7.3.2 E2E-5 setup: its own project and webServer, since it
     // needs a different DEMO_CLOCK_START (Monday 05 Oct, the E2E-5
     // reference day) from every other spec's Friday 02 Oct clock. A
@@ -104,7 +104,7 @@ export default defineConfig({
     // Role actions PR: a production build too, clocked to the demo time (Mon 05 Oct 2026,
     // 10:48 CEST). The browser's own zone is pinned to Europe/Bucharest, which is none of the viewers'
     // zones (MYT, SGT), so a time formatted in the browser's zone instead of the viewer's would fail.
-    { name: "role-actions", use: { ...devices["Desktop Chrome"], baseURL: "http://localhost:3104", timezoneId: "Europe/Bucharest", storageState: dismissed(3104) }, testMatch: /(onboarding(-screenshots)?|role-actions(-screenshots)?|action-plan-order-screenshots|assess-after-resolve|root-cause-report(-screenshots)?|issue-v5-screenshots|issue-times(-screenshots)?|issue-sections(-screenshots)?|report-from-home(-screenshots)?|ux-polish(-screenshots)?|small-fixes-v7)\.spec\.ts$/, expect: { timeout: 15_000 } },
+    { name: "role-actions", use: { ...devices["Desktop Chrome"], baseURL: "http://localhost:3104", timezoneId: "Europe/Bucharest", storageState: dismissed(3104) }, testMatch: /(onboarding(-screenshots)?|next-step(-screenshots)?|role-actions(-screenshots)?|action-plan-order-screenshots|assess-after-resolve|root-cause-report(-screenshots)?|issue-v5-screenshots|issue-times(-screenshots)?|issue-sections(-screenshots)?|report-from-home(-screenshots)?|ux-polish(-screenshots)?|small-fixes-v7)\.spec\.ts$/, expect: { timeout: 15_000 } },
     // Sandbox per visitor: a production build with DEMO_SANDBOXES on, so each browser context is its own visitor with its own schema. Last in the list on
     // purpose: its cron test restores the public schema (the cron always does), which the other projects' specs then set up again for themselves.
     { name: "sandbox", use: { ...devices["Desktop Chrome"], baseURL: "http://localhost:3105", timezoneId: "Europe/Bucharest", storageState: dismissed(3105) }, testMatch: /sandbox\.spec\.ts$/, expect: { timeout: 15_000 } },

@@ -68,7 +68,7 @@ export function YourNextAction({
     } else if (key === "notify" || key === "close") {
       // The filled primary of a message step is the Message panel's own button; this one takes the person there.
       button = (
-        <Button variant={rowVariant} onClick={scrollToMessage}>
+        <Button data-onboarding="go-to-message" variant={rowVariant} onClick={scrollToMessage}>
           Go to the message
         </Button>
       );
@@ -80,7 +80,7 @@ export function YourNextAction({
         </Button>
       );
     } else if (key === "investigate") {
-      button = <Button onClick={() => setResolveOpen(true)}>Resolve</Button>;
+      button = <Button data-onboarding="resolve" onClick={() => setResolveOpen(true)}>Resolve</Button>;
     } else if (key === "review_report" && reportDialog) {
       button = <ReportReviewActions issueId={issueId} displayId={reportDialog.displayId} entityName={reportDialog.entityName} />;
     } else if (key === "prepare_report" && reportDialog) {

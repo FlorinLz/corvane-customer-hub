@@ -28,7 +28,7 @@ export function AcknowledgeButton({ issueId, version }: { issueId: string; versi
   }
 
   return (
-    <Button loading={pending} onClick={() => void acknowledge()}>
+    <Button data-onboarding="acknowledge" loading={pending} onClick={() => void acknowledge()}>
       Acknowledge
     </Button>
   );

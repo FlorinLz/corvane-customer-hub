@@ -99,6 +99,16 @@ export interface ScenarioStep {
    */
   check: "data" | "viewed";
   needsPersona?: boolean;
+  /**
+   * What to do, in order, one to three short actions. A UI label is written between ** ** and shows in bold. The story (`text`) stays the story.
+   */
+  doThis: string[];
+  /**
+   * The element to click (or read, for "viewed" steps), as data-onboarding values in order of preference: the first one present on the page is
+   * highlighted. A dialog's own button comes before the button that opens it, so the highlight moves into the dialog and then to its submit.
+   * Syntax: `name`, `scope/name` (inside the data-onboarding="scope" element) or `name~text` (the element whose text contains `text`).
+   */
+  target: string[];
 }
 
 /** What the end of a chapter offers: the next chapter and a way out, or the link to the README. */
@@ -147,6 +157,8 @@ export const SCENARIOS: Record<ScenarioId, Scenario> = {
         steps: [
           {
             id: "s1-home",
+            doThis: ["Find **ISS-1042** at the top of the **Issues** table.", "Read **Next actions**."],
+            target: ["issue-row~ISS-1042"],
             title: "Start on Home as Emma Wilson",
             text: "Emma speaks for Corvane to MPS. ISS-1042 is at the top of her Home, and Next actions shows who it waits on: Kevin, still investigating.",
             ...EMMA,
@@ -157,6 +169,8 @@ export const SCENARIOS: Record<ScenarioId, Scenario> = {
           },
           {
             id: "s1-issue",
+            doThis: ["Read **Your next action**.", "Scroll to the **Action plan**."],
+            target: ["action-plan"],
             title: "Open ISS-1042",
             text: "Your next action shows Emma has nothing due and names who is next. The Action plan shows the night in process order: the alert, Kevin's acknowledgement 9 minutes later, the customer told within the hour.",
             ...EMMA,
@@ -167,6 +181,8 @@ export const SCENARIOS: Record<ScenarioId, Scenario> = {
           },
           {
             id: "s1-log",
+            doThis: ["Scroll to the **Communication log**.", "Read Kevin's first notification to Silvia."],
+            target: ["communication-log"],
             title: "Read the Communication log",
             text: "Kevin wrote to Silvia Moretti, the MPS incident contact, during the night. Emma reads exactly what was promised before she speaks to her.",
             ...EMMA,
@@ -176,6 +192,8 @@ export const SCENARIOS: Record<ScenarioId, Scenario> = {
           },
           {
             id: "s1-compliance",
+            doThis: ["Scroll to the **Compliance** card.", "In **Customer obligations**, find **Facts needed within 2 h**."],
+            target: ["customer-obligations"],
             title: "Look at the Compliance card",
             text: "MPS is a bank under DORA, so ISS-1042 is flagged for Compliance. Mei Chen assessed it as a possible major incident: MPS may have to report it to its regulator and needs the facts from Corvane within 2 hours, as Customer obligations shows.",
             ...EMMA,
@@ -185,6 +203,8 @@ export const SCENARIOS: Record<ScenarioId, Scenario> = {
           },
           {
             id: "s1-update",
+            doThis: ["In the message panel, complete the line **What we are doing**.", "Click **Copy message**, then **Record update**.", "Choose the **Channel** and click **Record notification**."],
+            target: ["record-communication-submit", "record-communication"],
             title: "Send the Update",
             text: "Send Silvia an Update from the message panel, then record it. The Communication log shows it at once, with Emma's name and the time.",
             ...EMMA,
@@ -208,6 +228,8 @@ export const SCENARIOS: Record<ScenarioId, Scenario> = {
         steps: [
           {
             id: "s1b-resolve",
+            doThis: ["Click **Resolve** in **Your next action**.", "Fill **Root cause** and **Solution**, then click **Resolve issue**."],
+            target: ["resolve-submit", "next-action/resolve"],
             title: "Resolve as Kevin Lim",
             text: "Switch to Kevin with View as. As owner he resolves ISS-1042. Watch the Action plan: the report steps appear, each with its person and deadline.",
             ...KEVIN,
@@ -217,6 +239,8 @@ export const SCENARIOS: Record<ScenarioId, Scenario> = {
           },
           {
             id: "s1b-confirm",
+            doThis: ["Click **Confirm resolution with the customer** in the message panel.", "Choose the **Channel** and click **Confirm resolution**."],
+            target: ["confirm-resolution-submit", "confirm-resolution"],
             title: "Confirm resolution as Emma Wilson",
             text: "Emma checks with Silvia that payments flow again and records it. The customer side is done; the report is still open.",
             ...EMMA,
@@ -226,6 +250,8 @@ export const SCENARIOS: Record<ScenarioId, Scenario> = {
           },
           {
             id: "s1b-share",
+            doThis: ["Click **Share draft** in **Your next action**.", "Click **Use example link**, then write one sentence in **Summary**.", "Click **Share draft**."],
+            target: ["use-example-link", "share-draft-submit", "next-action/share-draft"],
             title: "Share the draft report as Kevin",
             text: "Kevin writes what failed and why, and shares the draft. The deadline is 20 days from resolution, taken from the MPS contract.",
             ...KEVIN,
@@ -235,6 +261,8 @@ export const SCENARIOS: Record<ScenarioId, Scenario> = {
           },
           {
             id: "s1b-approve",
+            doThis: ["Click **Approve report** in **Your next action**.", "Click **Approve report** in the dialog."],
+            target: ["approve-report-submit", "next-action/approve-report"],
             title: "Approve as Mei Chen",
             text: "Mei reads the draft with the regulator in mind. She approves it, or asks for changes and it goes back to Kevin with her reason.",
             ...MEI,
@@ -244,6 +272,8 @@ export const SCENARIOS: Record<ScenarioId, Scenario> = {
           },
           {
             id: "s1b-send",
+            doThis: ["Click **Record report sent** in **Your next action**.", "Choose the **Channel** and click **Record report sent**."],
+            target: ["record-report-sent-submit", "next-action/record-report-sent"],
             title: "Send the approved report as Kevin",
             text: "Kevin sends the approved report to MPS. ISS-1042 closes on its own: every step is done, and nothing is left on anyone's Home.",
             ...KEVIN,
@@ -279,6 +309,8 @@ export const SCENARIOS: Record<ScenarioId, Scenario> = {
         steps: [
           {
             id: "s2-impact",
+            doThis: ["Open the **Partner** tab.", "Under **UK CoP / GB**, read **Customers on this coverage**."],
+            target: ["partner-customers", "partner-tab"],
             title: "Check who depends on Lloyds",
             // The Partner tab's UK CoP / GB card lists the customers on that coverage (the rule shared with Affected customers).
             text: "As Lukas, open the Lloyds Partner tab. UK CoP / GB lists every customer that sends its checks through Lloyds. These are the customers waiting on Lukas.",
@@ -290,6 +322,8 @@ export const SCENARIOS: Record<ScenarioId, Scenario> = {
           },
           {
             id: "s2-report",
+            doThis: ["Click **Report issue** on Home.", "Fill the form, following the hints.", "Click **Report issue**."],
+            target: ["report-issue-submit", "report-issue"],
             title: "Report the issue",
             text: "From Home, use Report issue. Anyone at Corvane can report, and it takes under a minute. The hints next to the form show what to enter.",
             ...LUKAS,
@@ -299,6 +333,8 @@ export const SCENARIOS: Record<ScenarioId, Scenario> = {
           },
           {
             id: "s2-degraded",
+            doThis: ["Click **Acknowledge** in **Your next action**.", "In the coverage banner, click **Set to Degraded**, then **Save status**."],
+            target: ["save-coverage-status", "next-action/acknowledge", "set-degraded"],
             title: "Acknowledge, then set to Degraded",
             text: "Acknowledging starts the work. Degraded marks Lloyds on every customer that relies on it, and Affected customers lists each one with its own notice deadline.",
             ...LUKAS,
@@ -308,6 +344,8 @@ export const SCENARIOS: Record<ScenarioId, Scenario> = {
           },
           {
             id: "s2-linked",
+            doThis: ["In **Affected customers**, click **Create linked issues**.", "Click **Create**."],
+            target: ["create-linked-submit", "create-linked-issues"],
             title: "Create linked issues",
             text: "One issue per affected customer, each with its own communicator. Every customer hears from one person who already knows them.",
             ...LUKAS,
@@ -317,6 +355,8 @@ export const SCENARIOS: Record<ScenarioId, Scenario> = {
           },
           {
             id: "s2-notify",
+            doThis: ["On Home, click the row that says **Notify Revolut Ltd**.", "In the message panel, click **Record notification**.", "Choose the **Channel** and click **Record notification**."],
+            target: ["record-communication-submit", "record-communication", "issue-row~Notify Revolut Ltd"],
             title: "Notify Revolut Ltd as Adrian Koh",
             text: "Switch to Adrian. His Home shows Notify Revolut Ltd with the time left. Record the notification and the deadline clears.",
             ...ADRIAN,
@@ -326,6 +366,8 @@ export const SCENARIOS: Record<ScenarioId, Scenario> = {
           },
           {
             id: "s2-resolve",
+            doThis: ["Click **Resolve** in **Your next action**.", "Fill **Root cause**, **Solution** and the event time, then click **Resolve issue**.", "Click **Resolve** in the dialog."],
+            target: ["resolve-cascade-submit", "resolve-submit", "next-action/resolve"],
             title: "Resolve once, as Lukas",
             text: "Paul confirms the fix. Lukas resolves the partner issue, and every linked issue resolves with it.",
             ...LUKAS,
@@ -388,3 +430,47 @@ export const NOTES: Record<NoteKey, { title: string; text: string }> = {
   "owner-communicator": { title: "People", text: "One owner fixes the issue and one communicator speaks to the customer. Everyone else contributes." },
   "linked-issues": { title: "Linked issues", text: "When a partner fails, every customer on that service is listed with its own deadline. Resolving the partner issue resolves every linked issue." },
 };
+
+
+/** The step the visitor is on: the first one not done, or -1 when all are. */
+export function currentStepIndex(steps: { id: string }[], isDone: (id: string) => boolean): number {
+  return steps.findIndex((st) => !isDone(st.id));
+}
+
+/** One piece of a `doThis` line: plain text, or a UI label to show in bold. */
+export interface DoThisPart {
+  text: string;
+  bold: boolean;
+}
+
+/** Splits "Click **Resolve** in **Your next action**." into plain and bold parts. Unmatched ** stay as text. */
+export function splitBold(line: string): DoThisPart[] {
+  const parts: DoThisPart[] = [];
+  const re = /\*\*([^*]+)\*\*/g;
+  let last = 0;
+  for (let m = re.exec(line); m; m = re.exec(line)) {
+    if (m.index > last) parts.push({ text: line.slice(last, m.index), bold: false });
+    parts.push({ text: m[1], bold: true });
+    last = m.index + m[0].length;
+  }
+  if (last < line.length) parts.push({ text: line.slice(last), bold: false });
+  return parts;
+}
+
+/** A parsed `target` entry. */
+export interface TargetSpec {
+  scope: string | null;
+  name: string;
+  text: string | null;
+}
+
+export function parseTarget(raw: string): TargetSpec {
+  const [path, text] = raw.split("~");
+  const slash = path.indexOf("/");
+  return { scope: slash === -1 ? null : path.slice(0, slash), name: slash === -1 ? path : path.slice(slash + 1), text: text ?? null };
+}
+
+/** "Click here" for a step that is done by clicking, "Read this" for one that is done by looking. */
+export function targetTag(step: Pick<ScenarioStep, "check">): string {
+  return step.check === "viewed" ? "Read this" : "Click here";
+}
