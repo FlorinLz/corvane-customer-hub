@@ -9,8 +9,9 @@ import { ISSUE_TYPE_LABELS, SCHEME_LABELS, TEAM_LABELS, ISSUE_STATUS_LABELS, iss
 import { ensureSystemWrites } from "@/server/issues/system-writes";
 import { effectiveCommunicator } from "@/server/derived/communicator";
 import { ackDueAtOf, computeClocks, type IssueClockFields } from "@/server/derived/issue-clocks";
-import { stepsFor, roleLabel, leadingStep } from "@/server/derived/issue-steps";
-import { roleActionsFor, compareHomeRows, type HomeSortKey, type RoleActionIssue, type RoleActionsView, type RoleName } from "@/server/derived/role-actions";
+import { computeDeadlines, deadlineFactsOf } from "@/server/derived/deadlines";
+import { stepsFor, roleLabel, leadingStep, type IssueStep } from "@/server/derived/issue-steps";
+import { DEADLINE_KEYS, roleActionsFor, compareHomeRows, type HomeSortKey, type RoleActionIssue, type RoleActionsView, type RoleName } from "@/server/derived/role-actions";
 
 // Brief 4.6.9, M20 AC1-AC13, M18 AC10. The Home "Issues" section's one
 // data source, shared by its own refresh endpoint (GET
@@ -25,12 +26,33 @@ export interface RoleLine {
   dueAt: string | null; // ISO
 }
 
+/**
+ * The Time column of a Home row: the issue's nearest open deadline, whoever owns it. Your own reads as it always did (bold, coloured); somebody else's
+ * reads as secondary text, "Kevin Lim · 3 h 40 min · Restore", and turns red only when breached. A paused clock says so. Null: the issue has no open clock.
+ */
+export interface RowTime {
+  dueAt: string | null; // ISO; null while paused
+  own: boolean;
+  person: string;
+  /** The short name of the clock: "Restore", "Update", "Chase". */
+  label: string;
+  dateOnly: boolean;
+  paused: { since: string; label: string } | null;
+  /** The clock's target in its own minutes and the share of it still left, for the orange rule (deadlines.ts). */
+  targetMinutes: number | null;
+  share: number | null;
+  /** The instant it turns orange (ISO), null for a clock with no such rule (the older ones: orange under 60 minutes). */
+  soonAt: string | null;
+}
+
 /** What the new Home issue row shows: time block, line 1, line 2 and the right column. */
 export interface RowView {
   scope: "mine" | "team";
-  /** The deadline in the time block: the viewer's own (Mine) or the most urgent open one on the issue (My team). */
+  /** The Time column (see RowTime). `timeDueAt` and `timePerson` below are its due time and, when somebody else's, the person. */
+  time: RowTime | null;
+  /** The deadline in the time block: the nearest open one on the issue, whoever owns it. */
   timeDueAt: string | null; // ISO
-  /** My team only: whose deadline the time block shows. Mine shows "for you" when there is none. */
+  /** Whose deadline the time block shows, when it is not the viewer's own. */
   timePerson: string | null;
   line1:
     | { kind: "own"; label: string }
@@ -149,6 +171,13 @@ async function loadCandidateIssues() {
       severity: true,
       severityCapLabel: true,
       awareAt: true,
+      resolvedAt: true,
+      restoredAt: true,
+      restoreNote: true,
+      restoredBy: { select: { name: true } },
+      waitingOnCustomerSince: true,
+      pausedMinutes: true,
+      pausedBusinessMinutes: true,
       clocksStartAt: true,
       ackStartAt: true,
       acknowledgedAt: true,
@@ -179,9 +208,10 @@ async function loadCandidateIssues() {
           ownerId: true,
           owner: { select: { id: true, name: true, team: true, timeZone: true, active: true } },
           issueTeam: { where: { team: "COMPLIANCE" }, select: { user: { select: { id: true, name: true, active: true } } } },
+          obligationCards: { where: { kind: "CUSTOMER_AGREEMENT" }, select: { factsNeededHours: true, regulatoryRegime: true } },
         },
       },
-      assessments: { select: { assessedAt: true, assessedBy: { select: { name: true } } }, orderBy: { assessedAt: "asc" }, take: 1 },
+      assessments: { select: { outcome: true, assessedAt: true, assessedBy: { select: { name: true } } }, orderBy: { assessedAt: "asc" } },
       rootCauseTask: { select: { dueAt: true, sentAt: true, approvedAt: true, approvedBy: { select: { name: true, team: true } }, draftSharedAt: true, draftSharedBy: { select: { name: true } }, changesRequestedAt: true, changesRequestedBy: { select: { name: true } }, changesRequestReason: true } },
       acknowledgedBy: { select: { name: true } },
       complianceAssessor: { select: { id: true, name: true } },
@@ -191,7 +221,7 @@ async function loadCandidateIssues() {
       },
       contributors: { where: { removedAt: null }, select: { userId: true } },
       notes: { where: { kind: "ADDED_REPORT" }, select: { authorId: true } },
-      communications: { where: { type: "CLOSURE_CONFIRMED" }, select: { occurredAt: true, recordedByName: true }, take: 1 },
+      communications: { select: { type: true, occurredAt: true, recordedByName: true }, orderBy: { occurredAt: "asc" } },
     },
   });
   // Brief 4.6.9: run the hand-over (and other on-read) system writes for
@@ -238,6 +268,14 @@ function enrich(issue: CandidateIssue, viewerZone: string, now: Date): Enriched 
     firstAssessmentAt,
   };
   const clocks = computeClocks(clockFields, { ownerCalendar, communicatorCalendar, viewerZone }, now);
+  const deadlines = computeDeadlines(
+    deadlineFactsOf({ issue: { ...issue, communicatorRule: issue.communicatorRule }, communications: issue.communications, assessments: issue.assessments, card: issue.entity.obligationCards[0] ?? null }),
+    { owner: ownerCalendar, communicator: communicatorCalendar },
+    now,
+  );
+  const closure = issue.communications.find((c) => c.type === "CLOSURE_CONFIRMED") ?? null;
+  const factsPack = issue.communications.find((c) => c.type === "FACTS_PACK_SENT") ?? null;
+  const reply = issue.communications.find((c) => c.type === "FIRST_NOTIFICATION" || c.type === "UPDATE") ?? null;
   const schemeCountry = issue.scheme && issue.country ? `${SCHEME_LABELS[issue.scheme as Scheme]} / ${issue.country}` : null;
   const parent = issue.routingRule === "INHERITED_FROM_PARENT" ? (issue.parentLinks[0]?.parent ?? null) : null;
   const actionIssue: RoleActionIssue = {
@@ -257,7 +295,11 @@ function enrich(issue: CandidateIssue, viewerZone: string, now: Date): Enriched 
     notifyRequired: issue.notifyRequired,
     notifiedAt: issue.notifiedAt,
     notifiedByName: null,
-    closure: issue.communications[0] ? { at: issue.communications[0].occurredAt, byName: issue.communications[0].recordedByName } : null,
+    closure: closure ? { at: closure.occurredAt, byName: closure.recordedByName } : null,
+    deadlines,
+    restored: issue.restoredAt ? { at: issue.restoredAt, byName: issue.restoredBy?.name ?? null, note: issue.restoreNote } : null,
+    factsSent: factsPack ? { at: factsPack.occurredAt, byName: factsPack.recordedByName } : null,
+    reply: reply ? { at: reply.occurredAt, byName: reply.recordedByName } : null,
     complianceFlaggedAt: issue.complianceFlaggedAt,
     complianceClosedAt: issue.complianceClosedAt,
     complianceVisibleFrom: issue.complianceVisibleFrom,
@@ -289,6 +331,35 @@ function enrich(issue: CandidateIssue, viewerZone: string, now: Date): Enriched 
 
 const iso = (d: Date | null) => d?.toISOString() ?? null;
 
+const ownerOf = (a: RoleActionsView["open"][number], rav: RoleActionsView) => rav.mine.includes(a);
+
+/**
+ * The deadline the Time column shows. Mine: the viewer's own deadline on the issue when they have one (even if someone else's is nearer), otherwise the
+ * nearest of anyone's. My team: the nearest open one, whoever owns it. On an issue that is Waiting on partner the partner chase is the visible clock.
+ * With no running clock, a paused one ("Paused · Waiting on customer"); with none at all, null.
+ */
+export function pickTime(rav: RoleActionsView, scope: "mine" | "team", status: string): RowTime | null {
+  const pick = (from: RoleActionsView["open"]) => {
+    const running = from.filter((a) => a.dueAt !== null);
+    const chase = status === "WAITING_ON_PARTNER" ? running.find((a) => a.key === "chase") : undefined;
+    return chase ?? running[0] ?? from.find((a) => a.paused) ?? null;
+  };
+  const own = scope === "mine" ? pick(rav.mine) : null;
+  const lead = own ?? pick(rav.open);
+  if (!lead) return null;
+  return {
+    dueAt: iso(lead.dueAt),
+    own: scope === "mine" && ownerOf(lead, rav),
+    person: lead.person.name,
+    label: lead.timeLabel,
+    dateOnly: !!lead.dateOnly,
+    paused: lead.paused ? { since: lead.paused.since.toISOString(), label: lead.paused.label } : null,
+    targetMinutes: lead.clock?.targetMinutes ?? null,
+    share: lead.clock?.share ?? null,
+    soonAt: iso(lead.clock?.soonAt ?? null),
+  };
+}
+
 /** The new Home row for one viewer (Mine) or for the whole issue (My team). */
 function buildView(e: Enriched, rav: RoleActionsView, scope: "mine" | "team"): { view: RowView; key: HomeSortKey } {
   const { issue } = e;
@@ -305,14 +376,16 @@ function buildView(e: Enriched, rav: RoleActionsView, scope: "mine" | "team"): {
   const line = (a: RoleActionsView["open"][number], forOthers = false): RoleLine => ({ role: a.role, person: a.person.name, label: forOthers ? (a.waitLabel ?? a.shortLabel) : a.shortLabel, dueAt: iso(a.dueAt) });
   const sortFields = { finished: issue.status === "RESOLVED" || issue.status === "CLOSED", severity: issue.severity, awareAt: issue.awareAt, number: issue.number };
 
+  const time = pickTime(rav, scope, issue.status);
   if (scope === "team") {
     const lead = rav.mostUrgent;
     return {
       view: {
         ...base,
-        timeDueAt: iso(lead?.dueAt ?? null),
-        timePerson: lead?.person.name ?? null,
-        timeDateOnly: !!lead?.dateOnly,
+        time,
+        timeDueAt: time?.dueAt ?? null,
+        timePerson: time && !time.own ? time.person : null,
+        timeDateOnly: !!time?.dateOnly,
         line1: lead ? { kind: "person", person: lead.person.name, label: lead.shortLabel } : { kind: "none" },
         line2: rav.open.filter((a) => a !== lead).map((a) => line(a)),
         hasAction: rav.open.length > 0,
@@ -326,9 +399,10 @@ function buildView(e: Enriched, rav: RoleActionsView, scope: "mine" | "team"): {
   return {
     view: {
       ...base,
-      timeDueAt: iso(own?.dueAt ?? null),
-      timePerson: null,
-      timeDateOnly: !!own?.dateOnly,
+      time,
+      timeDueAt: time?.dueAt ?? null,
+      timePerson: time && !time.own ? time.person : null,
+      timeDateOnly: !!time?.dateOnly,
       line1: own
         ? { kind: "own", label: own.shortLabel }
         : waiting
@@ -378,7 +452,10 @@ function mainRowFor(e: Enriched, userId: string, now: Date, scope: "mine" | "tea
   const reportOpen = (isOwner && !!issue.rootCauseTask && !issue.rootCauseTask.sentAt) || reviewerEligible;
   if (issue.status === "CLOSED" && !reportOpen) return null; // a Closed issue is only here for that task
 
-  const steps = stepsFor(
+  const rav = roleActionsFor(e.actionIssue, userId, now);
+  // The deadline model's steps (Restore service, Send update, ...) are steps too: they count in the badge and can lead the row.
+  const extraSteps: IssueStep[] = rav.mine.filter((a) => DEADLINE_KEYS.includes(a.key)).map((a) => ({ text: a.shortLabel, clockText: null, dueAt: a.dueAt, overdue: !!a.dueAt && a.dueAt.getTime() < now.getTime() }));
+  const steps = [...stepsFor(
     {
       status: issue.status,
       notifyRequired: issue.notifyRequired,
@@ -388,15 +465,15 @@ function mainRowFor(e: Enriched, userId: string, now: Date, scope: "mine" | "tea
       complianceClosedAt: issue.complianceClosedAt,
       firstAssessmentAt: e.firstAssessmentAt,
       complianceVisibleFrom: issue.complianceVisibleFrom,
-      resolutionConfirmed: issue.communications.length > 0,
+      resolutionConfirmed: issue.communications.some((c) => c.type === "CLOSURE_CONFIRMED"),
       reportTask: issue.rootCauseTask ? { dueAt: issue.rootCauseTask.dueAt, sent: !!issue.rootCauseTask.sentAt, approved: !!issue.rootCauseTask.approvedAt, draftShared: !!issue.rootCauseTask.draftSharedAt } : null,
     },
     { isOwner, isCommunicator, isComplianceAssessor: assessorEligible, isReportReviewer: reviewerEligible },
     e.clocks,
     now,
-  );
+  ), ...extraSteps];
   const { step, moreCount } = leadingStep(steps);
-  const { view, key } = buildView(e, roleActionsFor(e.actionIssue, userId, now), scope);
+  const { view, key } = buildView(e, rav, scope);
   // Resolved and nothing left for this viewer: a communicator who has confirmed the resolution waits like everyone else.
   const isResolvedWaiting = issue.status === "RESOLVED" && !assessorEligible && !reportOpen && (!isCommunicator || steps.length === 0);
 

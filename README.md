@@ -15,6 +15,8 @@ When a check breaks, four teams must act fast and one person must speak to the c
 
 In the scenario panel only the current step is open. A bubble next to the element shows one action at a time, for the screen you are on, with the exact button names in bold. You walk through the platform by real clicks: View as, search, rows, tabs, fields. Fill for me types the suggested text, Skip ahead jumps to the next real action, and Back on track brings you home if you wander.
 
+**Deadlines.** Every issue has a small set of clocks (acknowledge, notify, restore, resolve, customer update, facts for the regulator, confirm resolution, partner chase, reply to customer, root cause report), each with a target and a source in `src/server/config.ts` and DECISIONS.md "Deadline model". Home's Time column shows the issue's nearest deadline whoever owns it.
+
 ### Five principles
 
 1. Anyone can report an issue.

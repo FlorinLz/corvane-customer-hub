@@ -89,6 +89,75 @@ export const ACK_TARGET: Record<Severity, { minutes: number; business: boolean }
 export const NOTIFY_TARGET_SEV2_BUSINESS_MINUTES = 240;
 export const NOTIFY_TARGET_SEV1_DEFAULT_HOURS = 2;
 
+/**
+ * The deadline model (DECISIONS.md "Deadline model"). Every clock counts from "Corvane aware at" unless its comment says otherwise. Sev-1 clocks run
+ * 24/7; every other clock counts business minutes of the person it belongs to (09:00 to 18:00, Monday to Friday, `BUSINESS_DAY_MINUTES` a day).
+ * Sev-4 has no clock apart from Acknowledge, on purpose: red always means act now.
+ */
+export type Target = { minutes: number; business: boolean };
+const BD = 540; // one business day, BUSINESS_DAY_MINUTES (declared further down)
+
+/** Restore service. Owner. Standard SLA practice for a service outage: 4 h at Sev-1, 1 business day at Sev-2. */
+export const RESTORE_TARGET: Partial<Record<Severity, Target>> = {
+  SEV1: { minutes: 240, business: false },
+  SEV2: { minutes: BD, business: true },
+};
+
+/** Restore service applies to an outage: a wrong match, a billing question or a commercial request has nothing to restore. */
+export const RESTORE_ISSUE_TYPES: IssueType[] = ["SERVICE_UNAVAILABLE", "PARTNER_DEGRADED", "INTEGRATION_BLOCKER"];
+
+/** Resolve. Owner. Standard SLA practice: Sev-1 has none (restoring the service is the target), Sev-2 5 business days, Sev-3 10 business days. */
+export const RESOLVE_TARGET: Partial<Record<Severity, Target>> = {
+  SEV2: { minutes: 5 * BD, business: true },
+  SEV3: { minutes: 10 * BD, business: true },
+};
+
+/**
+ * Customer update, repeating. Communicator. SLA practice, and DORA's intermediate reporting. Sev-1: every 60 min until the service is restored, then
+ * every 4 h until resolved. Sev-2: every 4 business hours until resolved. Sev-3 and Sev-4: none.
+ */
+export const UPDATE_CADENCE: Partial<Record<Severity, { beforeRestore: Target; afterRestore: Target }>> = {
+  SEV1: { beforeRestore: { minutes: 60, business: false }, afterRestore: { minutes: 240, business: false } },
+  SEV2: { beforeRestore: { minutes: 240, business: true }, afterRestore: { minutes: 240, business: true } },
+};
+
+/**
+ * Facts for the regulator. Communicator, with Compliance. Sev-1 only, when Compliance assessed a possible major incident at a customer with a regulatory
+ * regime. The target is the contract's `factsNeededHours` (the Customer obligations card); DORA RTS 2025/301 asks for an initial notification within 4 h
+ * of classifying an incident as major and an intermediate report within 72 h, and FCA PS26/2 sets similar windows. Counted from the assessment.
+ */
+export const FACTS_FOR_REGULATOR = { severity: "SEV1" as Severity, outcome: "POSSIBLE_MAJOR_INCIDENT" as const };
+
+/** Confirm resolution with the customer. Communicator. SLA practice: 1 business day after the issue is resolved, at Sev-1 and Sev-2. */
+export const CONFIRM_TARGET: Partial<Record<Severity, Target>> = {
+  SEV1: { minutes: BD, business: true },
+  SEV2: { minutes: BD, business: true },
+};
+
+/** Approve root cause report. Compliance. Corvane's own target: 3 business days after the owner shares the draft, never later than the report task's due date. */
+export const REVIEW_TARGET: Target = { minutes: 3 * BD, business: true };
+
+/** Partner chase, repeating, on a partner issue. Owner (Network). ITIL underpinning contracts: chase the partner every hour at Sev-1, 4 business hours at Sev-2, 2 business days at Sev-3. */
+export const PARTNER_CHASE_TARGET: Partial<Record<Severity, Target>> = {
+  SEV1: { minutes: 60, business: false },
+  SEV2: { minutes: 240, business: true },
+  SEV3: { minutes: 2 * BD, business: true },
+};
+
+/** Reply to customer, on BILLING and COMMERCIAL_COVERAGE issues. Owner. PSD2 Art. 101 and FCA DISP give the bank 15 business days to answer a complaint; Corvane aims at 5. */
+export const REPLY_TARGET: Partial<Record<Severity, Target>> = {
+  SEV2: { minutes: 5 * BD, business: true },
+  SEV3: { minutes: 5 * BD, business: true },
+};
+export const REPLY_ISSUE_TYPES: IssueType[] = ["BILLING", "COMMERCIAL_COVERAGE"];
+
+/** Root cause report. Owner. The contract's `postIncidentReportDays` (calendar days); when the card has none, 10 business days. DORA's final report is due at one month. */
+export const REPORT_DEFAULT_BUSINESS_DAYS = 10;
+
+/** Orange: under this many minutes left, or under this share of the target, whichever comes first. */
+export const SOON_MINUTES = 60;
+export const SOON_SHARE = 0.25;
+
 /** Brief 3.3.6, M25 AC5. Compliance assessment countdown while the flagged issue is Sev-1. */
 export const COMPLIANCE_ASSESS_MINUTES = 60;
 

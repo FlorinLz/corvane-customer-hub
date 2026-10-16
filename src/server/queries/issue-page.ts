@@ -5,6 +5,7 @@ import { effectiveTimeZone } from "@/lib/time-zones";
 import { STAGE_ORDER } from "@/lib/labels";
 import { ensureSystemWrites } from "@/server/issues/system-writes";
 import { ackDueAtOf, computeClocks, type IssueClockFields } from "@/server/derived/issue-clocks";
+import { computeDeadlines, deadlineFactsOf } from "@/server/derived/deadlines";
 import { effectiveCommunicator } from "@/server/derived/communicator";
 import { roleActionsFor, type RoleActionIssue } from "@/server/derived/role-actions";
 import { TYPE_SEVERITY_CAP } from "@/server/derived/severity";
@@ -59,6 +60,7 @@ export async function loadIssuePageData(issueId: string, viewer: User) {
       reporter: { select: { id: true, name: true, team: true } },
       owner: { select: { id: true, name: true, team: true, timeZone: true, active: true } },
       acknowledgedBy: { select: { name: true } },
+      restoredBy: { select: { name: true } },
       rootCauseTask: { include: { sentBy: { select: { name: true, team: true } }, approvedBy: { select: { name: true, team: true } }, draftSharedBy: { select: { name: true } }, changesRequestedBy: { select: { name: true } } } },
       customerReporterContact: { select: { fullName: true, status: true } },
       resolutions: { orderBy: { resolvedAt: "desc" }, include: { resolvedBy: { select: { name: true } } } },
@@ -139,6 +141,13 @@ export async function loadIssuePageData(issueId: string, viewer: User) {
     firstAssessmentAt: issue.assessments.length > 0 ? issue.assessments[issue.assessments.length - 1].assessedAt : null,
   };
   const clocks = computeClocks(clockFields, { ownerCalendar, communicatorCalendar, viewerZone }, t);
+  const deadlines = computeDeadlines(
+    deadlineFactsOf({ issue, communications: issue.communications, assessments: issue.assessments, card }),
+    { owner: ownerCalendar, communicator: communicatorCalendar },
+    t,
+  );
+  const factsPack = [...issue.communications].reverse().find((c) => c.type === "FACTS_PACK_SENT") ?? null; // communications are newest first
+  const firstReply = [...issue.communications].reverse().find((c) => c.type === "FIRST_NOTIFICATION" || c.type === "UPDATE") ?? null;
 
   // Role actions: who has to do what on this issue, by when, as this viewer sees it (replaces the Clocks card and the "Overdue by" banner).
   const parent = issue.routingRule === "INHERITED_FROM_PARENT" ? (issue.parentLinks[0]?.parent ?? null) : null;
@@ -184,6 +193,10 @@ export async function loadIssuePageData(issueId: string, viewer: User) {
       const c = issue.communications.find((x) => x.type === "CLOSURE_CONFIRMED");
       return c ? { at: c.occurredAt, byName: c.recordedByName } : null;
     })(),
+    deadlines,
+    restored: issue.restoredAt ? { at: issue.restoredAt, byName: issue.restoredBy?.name ?? null, note: issue.restoreNote } : null,
+    factsSent: factsPack ? { at: factsPack.occurredAt, byName: factsPack.recordedByName } : null,
+    reply: firstReply ? { at: firstReply.occurredAt, byName: firstReply.recordedByName } : null,
     // The Action plan also lists the steps that wait for an earlier one (Home does not).
     planned: true,
     reportPlan:
@@ -242,6 +255,7 @@ export async function loadIssuePageData(issueId: string, viewer: User) {
     roles,
     communicator,
     clocks,
+    deadlines,
     roleActions,
     clockFields,
     clocksCtx: { ownerCalendar, communicatorCalendar, viewerZone },

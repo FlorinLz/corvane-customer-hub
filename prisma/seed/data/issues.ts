@@ -19,12 +19,14 @@ export interface SeedIssueNote {
 }
 
 export interface SeedIssueCommunication {
-  type: "FIRST_NOTIFICATION";
+  type: "FIRST_NOTIFICATION" | "UPDATE" | "FACTS_PACK_SENT";
   channel: "EMAIL" | "PHONE";
   contactEntityKey: string;
   contactName: string;
   recordedByKey: string;
   message: string;
+  /** When it was recorded. Default: the issue's notifiedAt (the first notification). */
+  at?: SeedIssueTime;
 }
 
 export interface SeedComplianceAssessment {
@@ -72,13 +74,17 @@ export interface SeedIssue {
   acknowledgedAt: SeedIssueTime | null;
   acknowledgedByKey: string | null;
   notifiedAt: SeedIssueTime | null;
+  /** The owner recorded "Service restored" (the deadline model): when, by whom, and the note. */
+  restoredAt?: SeedIssueTime | null;
+  restoredByKey?: string | null;
+  restoreNote?: string | null;
   notes: SeedIssueNote[];
   communications: SeedIssueCommunication[];
   complianceAssessment: SeedComplianceAssessment | null;
 }
 
 const AMS = "Europe/Amsterdam";
-const at = (offsetDays: number, time: string): SeedIssueTime => ({ offsetDays, time, zone: AMS });
+const at = (offsetDays: number, time: string, zone: string = AMS): SeedIssueTime => ({ offsetDays, time, zone });
 
 /** An issue of the fuller worklists: weekday-relative to the demo clock (offset 0 = demo day, -1 = the weekday before), times in CEST. */
 function worklistIssue(i: Partial<SeedIssue> & Pick<SeedIssue, "displayId" | "number" | "entityKey" | "type" | "impact" | "description" | "awareAt" | "savedAt" | "reporterKey">): SeedIssue {
@@ -182,6 +188,24 @@ export const ISSUES: SeedIssue[] = [
         recordedByKey: "kevin",
         message: "First notification to Priya Nair: ISS-1038 affects wrong-match results for Revolut Ltd on UK CoP GB. Our Ops team is working with the responding bank on trading-name support.",
       },
+      {
+        type: "UPDATE",
+        channel: "EMAIL",
+        contactEntityKey: "revolut",
+        contactName: "Priya Nair",
+        recordedByKey: "adrian",
+        at: at(-1, "11:00", "Asia/Kuala_Lumpur"),
+        message: "Update to Priya Nair on ISS-1038: the responding bank confirmed it matches on legal names only and is checking trading-name support. 14 cases so far, no new ones since yesterday.",
+      },
+      {
+        type: "UPDATE",
+        channel: "EMAIL",
+        contactEntityKey: "revolut",
+        contactName: "Priya Nair",
+        recordedByKey: "adrian",
+        at: at(0, "13:45", "Asia/Kuala_Lumpur"),
+        message: "Update to Priya Nair on ISS-1038: the responding bank plans trading-name support for its next release. We keep logging new cases and will tell you when a date is confirmed.",
+      },
     ],
     complianceAssessment: null,
   },
@@ -216,6 +240,11 @@ export const ISSUES: SeedIssue[] = [
         at: { offsetDays: -1, time: "21:40", zone: "Europe/Amsterdam" },
       },
     ],
+    // The service came back at night: the certificate was renewed at 22:30. Kevin kept MPS up to date (every 60 min before the restore, every 4 h after it),
+    // and sent the facts for MPS's regulator within the 2 h the contract gives. The last update was at 06:30, so the next is due at 10:30.
+    restoredAt: at(-1, "22:30"),
+    restoredByKey: "kevin",
+    restoreNote: "Endpoint certificate renewed. Name checks are answering again; Ops keeps watching the endpoint.",
     communications: [
       {
         type: "FIRST_NOTIFICATION",
@@ -224,6 +253,42 @@ export const ISSUES: SeedIssue[] = [
         contactName: "Silvia Moretti",
         recordedByKey: "kevin",
         message: "First notification to Silvia Moretti: ISS-1042 is affecting every EU VoP request for Banca Monte dei Paschi di Siena S.p.A. Our Ops team is renewing the expired endpoint certificate now.",
+      },
+      {
+        type: "FACTS_PACK_SENT",
+        channel: "EMAIL",
+        contactEntityKey: "mps",
+        contactName: "Silvia Moretti",
+        recordedByKey: "kevin",
+        at: at(-1, "22:40"),
+        message: "Facts for MPS's regulator on ISS-1042: every EU VoP request failed from 21:10 CEST because the endpoint certificate expired; about 100 % of requests were affected until 22:30; the certificate was renewed and the service restored. Compliance assessed a possible major incident at 21:58.",
+      },
+      {
+        type: "UPDATE",
+        channel: "EMAIL",
+        contactEntityKey: "mps",
+        contactName: "Silvia Moretti",
+        recordedByKey: "kevin",
+        at: at(-1, "23:00"),
+        message: "Update to Silvia Moretti on ISS-1042: the endpoint certificate is renewed and EU VoP is answering again. Ops keeps watching the error rate. Next update in 4 hours.",
+      },
+      {
+        type: "UPDATE",
+        channel: "EMAIL",
+        contactEntityKey: "mps",
+        contactName: "Silvia Moretti",
+        recordedByKey: "kevin",
+        at: at(0, "02:30"),
+        message: "Update to Silvia Moretti on ISS-1042: error rate has stayed at 0 % since 22:30. We keep monitoring and will confirm the cause in the root cause report.",
+      },
+      {
+        type: "UPDATE",
+        channel: "EMAIL",
+        contactEntityKey: "mps",
+        contactName: "Silvia Moretti",
+        recordedByKey: "kevin",
+        at: at(0, "06:30"),
+        message: "Update to Silvia Moretti on ISS-1042: no failed requests overnight. The rotation job is being repaired so the certificate renews itself next time.",
       },
     ],
     complianceAssessment: {
@@ -243,9 +308,21 @@ export const ISSUES: SeedIssue[] = [
   worklistIssue({
     displayId: "ISS-1020", number: 1020, entityKey: "ingdiba", scheme: "EU_VOP", country: "DE", type: "PARTNER_DEGRADED", partner: true, noDefaultContributor: true,
     impact: "DEGRADED", description: "ING-DiBa's EU VoP endpoint rejects name checks that contain umlauts; its service desk has confirmed an encoding fault and is testing a fix.",
-    awareAt: at(-1, "08:00"), savedAt: at(-1, "08:05"), eventMinutesBeforeAware: 30, awarenessSource: "INTERNAL", reporterKey: "lukas",
-    acknowledgedAt: at(-1, "08:40"), acknowledgedByKey: "lukas",
-    notes: [{ authorKey: "lukas", body: "ING-DiBa confirmed the encoding fault on their side. A fix is planned for their next release window.", at: at(-1, "09:30") }],
+    // Friday 11:00 CEST (17:00 Singapore): the Network clocks start on Monday morning. Restore is due Monday 17:00 Singapore (11:00 CEST).
+    awareAt: at(-1, "11:00"), savedAt: at(-1, "11:05"), eventMinutesBeforeAware: 30, awarenessSource: "INTERNAL", reporterKey: "lukas",
+    acknowledgedAt: at(-1, "11:20"), acknowledgedByKey: "lukas", notifiedAt: at(-1, "11:45"),
+    notes: [{ authorKey: "lukas", body: "ING-DiBa confirmed the encoding fault on their side. A fix is planned for their next release window.", at: at(-1, "12:30") }],
+    // Lukas chases the partner: the clock (every 4 business hours at Sev-2) restarts at each contact. The last one was Monday 12:30 Singapore, so the next is due at 16:30.
+    communications: [
+      {
+        type: "FIRST_NOTIFICATION", channel: "PHONE", contactEntityKey: "ingdiba", contactName: "Jonas Weber", recordedByKey: "lukas",
+        message: "First contact with Jonas Weber on ISS-1020: EU VoP name checks with umlauts are rejected. He confirmed an encoding fault and is testing a fix.",
+      },
+      {
+        type: "UPDATE", channel: "EMAIL", contactEntityKey: "ingdiba", contactName: "Jonas Weber", recordedByKey: "lukas", at: at(0, "06:30"),
+        message: "Chase to Jonas Weber on ISS-1020: is the encoding fix still planned for the next release window? Please send a date.",
+      },
+    ],
   }),
   // Customer Success: billing, Finance owns. Acknowledge deadline passed on Monday 09:35 (Finance calendar, 1 business day).
   worklistIssue({

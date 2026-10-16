@@ -1049,6 +1049,9 @@ export async function seed(db: PrismaClient): Promise<void> {
         notifyTargetBusinessMins,
         notifyDueAt,
         notifiedAt,
+        restoredAt: si.restoredAt ? resolveIssueTime(si, si.restoredAt) : null,
+        restoredById: si.restoredAt && si.restoredByKey ? userIdByKey[si.restoredByKey] : null,
+        restoreNote: si.restoredAt ? (si.restoreNote ?? null) : null,
         complianceFlaggedAt,
         complianceReasons: reasons,
         complianceClockStartAt,
@@ -1083,12 +1086,13 @@ export async function seed(db: PrismaClient): Promise<void> {
 
     for (const comm of si.communications) {
       const recordedBy = userByKey.get(comm.recordedByKey)!;
+      const occurredAt = comm.at ? resolveIssueTime(si, comm.at) : notifiedAt!;
       await db.issueCommunication.create({
         data: {
-          issueId: issue.id, type: comm.type, occurredAt: notifiedAt!, channel: comm.channel,
+          issueId: issue.id, type: comm.type, occurredAt, channel: comm.channel,
           contactId: contactIdByEntityAndName[`${comm.contactEntityKey}::${comm.contactName}`], personName: comm.contactName,
           message: comm.message, recordedById: userIdByKey[comm.recordedByKey], recordedByName: recordedBy.name,
-          createdAt: notifiedAt!,
+          createdAt: occurredAt,
         },
       });
     }
@@ -1151,10 +1155,20 @@ export async function seed(db: PrismaClient): Promise<void> {
 
     for (const comm of si.communications) {
       const recordedBy = userByKey.get(comm.recordedByKey)!;
+      const occurredAt = comm.at ? resolveIssueTime(si, comm.at) : notifiedAt!;
+      const typeLabel = comm.type === "FIRST_NOTIFICATION" ? "First notification" : comm.type === "UPDATE" ? "Update" : "Facts pack sent";
       await addHistory(db as never, {
         entityId, category: "INCIDENT",
-        summary: `${issueDisplayId(issue.number)}: First notification to ${comm.contactName} by ${comm.channel === "EMAIL" ? "Email" : "Phone"}, recorded by ${recordedBy.name}`,
-        actionId: actionId(), actorId: userIdByKey[comm.recordedByKey], actorName: recordedBy.name, actorTeam: recordedBy.team as Team, createdAt: notifiedAt!,
+        summary: `${issueDisplayId(issue.number)}: ${typeLabel} to ${comm.contactName} by ${comm.channel === "EMAIL" ? "Email" : "Phone"}, recorded by ${recordedBy.name}`,
+        actionId: actionId(), actorId: userIdByKey[comm.recordedByKey], actorName: recordedBy.name, actorTeam: recordedBy.team as Team, createdAt: occurredAt,
+      });
+    }
+    if (si.restoredAt && si.restoredByKey) {
+      const restoredBy = userByKey.get(si.restoredByKey)!;
+      await addHistory(db as never, {
+        entityId, category: "INCIDENT",
+        summary: `${issueDisplayId(issue.number)} service restored, recorded by ${restoredBy.name}`,
+        actionId: actionId(), actorId: userIdByKey[si.restoredByKey], actorName: restoredBy.name, actorTeam: restoredBy.team as Team, createdAt: resolveIssueTime(si, si.restoredAt),
       });
     }
 

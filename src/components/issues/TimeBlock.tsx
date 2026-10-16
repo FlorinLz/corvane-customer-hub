@@ -1,3 +1,5 @@
+import { Pause } from "lucide-react";
+
 import { byDateText, byText, timeLeft } from "@/lib/time-block";
 import { cn } from "@/lib/utils";
 
@@ -21,6 +23,8 @@ export function TimeBlock({
   dateOnly,
   compact,
   muted,
+  soonAt,
+  paused,
 }: {
   dueAt: Date | null;
   now: Date;
@@ -35,8 +39,24 @@ export function TimeBlock({
   compact?: boolean;
   /** A Resolved or Closed row: no red, no amber, the time reads as plain secondary text. */
   muted?: boolean;
+  /** The instant a deadline of the deadline model turns orange (60 minutes before it is due, or 25% of its target left, whichever is first). */
+  soonAt?: Date | null;
+  /** Waiting on customer holds the clock: "Paused", with the reason, and no time. */
+  paused?: { label: string } | null;
 }) {
-  const left = timeLeft(dueAt, now);
+  if (paused) {
+    return (
+      <div data-testid={testId} data-state="paused" className={cn("flex min-w-0 flex-col", className)}>
+        <span className="inline-flex items-center gap-1.5 text-body font-semibold text-text-secondary">
+          <Pause className="size-4 shrink-0" aria-hidden="true" />
+          Paused
+        </span>
+        <span className="min-w-0 break-words text-meta text-text-secondary">{paused.label}</span>
+      </div>
+    );
+  }
+  const raw = timeLeft(dueAt, now);
+  const left = raw.state === "default" && soonAt && now >= soonAt ? { ...raw, state: "soon" as const } : raw;
   const small = dueAt ? [note, dateOnly ? byDateText(dueAt, now, zone) : byText(dueAt, now, zone)].filter(Boolean).join(" · ") : (note ?? "");
   const state = muted && (left.state === "over" || left.state === "soon") ? "muted" : left.state;
 

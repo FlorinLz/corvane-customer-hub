@@ -31,7 +31,7 @@ DROP SCHEMA IF EXISTS public CASCADE;
 CREATE SCHEMA public;
 GRANT USAGE ON SCHEMA public TO hub_app;
 
--- 2. The migrations, in order: 20261010000000_baseline, 20261014093351_demo_meta_idle_restore, 20261015090000_demo_sandbox
+-- 2. The migrations, in order: 20261010000000_baseline, 20261014093351_demo_meta_idle_restore, 20261015090000_demo_sandbox, 20261016090000_deadline_model
 -- Migration 20261010000000_baseline
 -- Baseline: the whole schema in one migration (replaces the earlier migration history).
 -- Part 0 is the issue number sequence, which Issue.number defaults to.
@@ -1568,6 +1568,17 @@ BEGIN
   END IF;
 END $$;
 
+-- Migration 20261016090000_deadline_model
+-- AlterTable
+ALTER TABLE "Issue" ADD COLUMN     "pausedBusinessMinutes" INTEGER NOT NULL DEFAULT 0,
+ADD COLUMN     "pausedMinutes" INTEGER NOT NULL DEFAULT 0,
+ADD COLUMN     "restoreNote" VARCHAR(500),
+ADD COLUMN     "restoredAt" TIMESTAMPTZ(3),
+ADD COLUMN     "restoredById" TEXT;
+
+-- AddForeignKey
+ALTER TABLE "Issue" ADD CONSTRAINT "Issue_restoredById_fkey" FOREIGN KEY ("restoredById") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
 -- 3. Prisma's migration history: every migration above is recorded as applied, so `prisma migrate status` finds nothing pending.
 CREATE TABLE "_prisma_migrations" (
     "id" VARCHAR(36) NOT NULL,
@@ -1584,7 +1595,8 @@ INSERT INTO "_prisma_migrations" ("id", "checksum", "finished_at", "migration_na
 VALUES
     ('00000000-0000-4000-8000-000000000001', 'e4050fbb5a1e725c1afc1ae2fbc89a9e744e2f991616f7e56a0e27e99d70e986', now(), '20261010000000_baseline', 1),
     ('00000000-0000-4000-8000-000000000002', 'f44bf843cf97cc6bc56dd79d1063ce267f3b547d28f53cfd3b31ff88295b74a8', now(), '20261014093351_demo_meta_idle_restore', 1),
-    ('00000000-0000-4000-8000-000000000003', 'aa38a44190ee93a0f93fe6fbead096a2dc599785714d649a54bd8fdbb24daf94', now(), '20261015090000_demo_sandbox', 1);
+    ('00000000-0000-4000-8000-000000000003', 'aa38a44190ee93a0f93fe6fbead096a2dc599785714d649a54bd8fdbb24daf94', now(), '20261015090000_demo_sandbox', 1),
+    ('00000000-0000-4000-8000-000000000004', '410a5a2c0a5deebba5465d1d9de91cfd488343d404251c9e1c157a0907a36df2', now(), '20261016090000_deadline_model', 1);
 
 -- 4. The runtime role's grants (prisma/grants.sql, unchanged).
 -- Brief 3.2.3. Run by scripts/db-reset.ts after migrations, as hub_owner.

@@ -145,7 +145,7 @@ describe("pickMove: persona, data and done moves", () => {
       viewer: LUKAS,
       route: routeOf("/issues/p1", ids),
       done: new Set(["rs-home", "rs-row", "rs-open"]),
-      valued: new Set(["rs-cause", "rs-solution"]),
+      valued: new Set(["rs-status", "rs-cause", "rs-solution"]),
       present: new Set(["rs-submit"]), // no event fields on a Sev-2 issue
     });
     expect(pickMove(input)).toMatchObject({ move: { id: "rs-submit" } });

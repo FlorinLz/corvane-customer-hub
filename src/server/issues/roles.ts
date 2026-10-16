@@ -2,6 +2,7 @@ import type { Prisma } from "@prisma/client";
 
 import { now } from "@/lib/dates";
 import { effectiveTimeZone, formatInZone } from "@/lib/time-zones";
+import { REPLY_ISSUE_TYPES } from "@/server/config";
 import { effectiveCommunicator, type CommunicatorIssue } from "@/server/derived/communicator";
 import { NotFoundError, IssueForbiddenError } from "@/server/errors";
 import { assertCan } from "@/server/permissions/guard";
@@ -36,9 +37,11 @@ export async function assertIsOwner<T extends { ownerId: string | null }>(tx: Pr
  */
 export async function assertIsCommunicator(
   tx: Prisma.TransactionClient,
-  issue: CommunicatorIssue & { entityId: string },
+  issue: CommunicatorIssue & { entityId: string; type?: string },
   user: SessionUser,
 ): Promise<void> {
+  // The owner answers a BILLING or COMMERCIAL_COVERAGE question themselves (the "Reply to customer" step is the owner's).
+  if (issue.type && (REPLY_ISSUE_TYPES as string[]).includes(issue.type) && issue.ownerId === user.id) return;
   const entity = await tx.entity.findUnique({ where: { id: issue.entityId }, select: { ownerId: true } });
   const t = now();
   const communicatorId = effectiveCommunicator(issue, { ownerId: entity?.ownerId ?? null }, t);

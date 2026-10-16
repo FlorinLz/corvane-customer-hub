@@ -5,6 +5,7 @@ import { AlertTriangle, Copy, ExternalLink, Phone } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import { byText } from "@/lib/time-block";
 import { cn } from "@/lib/utils";
 import { RecordCommunicationDialog } from "@/components/issues/RecordCommunicationDialog";
 import { CloseDialog } from "@/components/issues/CloseDialog";
@@ -59,6 +60,10 @@ export function CommunicationSection({
   contacts,
   viewerZone,
   resolvedAt,
+  nextUpdate,
+  factsOpen,
+  ownerMayReply,
+  serverNow,
 }: {
   issueId: string;
   version: number;
@@ -87,6 +92,13 @@ export function CommunicationSection({
   contacts: PickerContact[];
   viewerZone: string;
   resolvedAt: Date | null;
+  /** The next customer update is due at (the repeating Update clock), while it runs. */
+  nextUpdate?: Date | null;
+  /** Facts for the customer's regulator are still to send: the panel offers "Record facts pack". */
+  factsOpen?: boolean;
+  /** BILLING and COMMERCIAL_COVERAGE: the owner answers the customer, so the owner records the reply here. */
+  ownerMayReply?: boolean;
+  serverNow: Date;
 }) {
   // M22 AC5, edge case 9: "After the click the page shows 'Sent it? Record
   // the notification' next to 'Record notification'" -- set once "Open in
@@ -107,7 +119,7 @@ export function CommunicationSection({
   }, [stage, initialSubject, initialBody]);
   const subject = text.subject;
   const body = text.body;
-  const canAct = stage === "REPORT" ? isOwner : isCommunicator;
+  const canAct = stage === "REPORT" ? isOwner : isCommunicator || !!ownerMayReply;
   const placeholderLeft = stage === "UPDATE" && body.includes(UPDATE_PLACEHOLDER_LINE);
   // Every message for this issue is recorded and no next template applies: the panel keeps no stale template.
   const nothingLeft = stage === "RESOLUTION" && resolutionConfirmed;
@@ -186,6 +198,11 @@ export function CommunicationSection({
         <div className="flex flex-col gap-1">
           <h3 className="text-subsection">Message to the {who}{nothingLeft ? "" : ` · ${MESSAGE_STAGE_LABELS[stage]}`}</h3>
           {!nothingLeft && <p className="text-meta text-text-secondary">Your edits are kept on this page until you record the message.</p>}
+          {!nothingLeft && stage === "UPDATE" && nextUpdate && (
+            <p data-testid="next-update-due" className="text-body font-medium">
+              Next update due {byText(nextUpdate, serverNow, viewerZone)}
+            </p>
+          )}
         </div>
         {nothingLeft ? (
           <p data-testid="all-messages-sent" className="text-body text-text-secondary">
@@ -226,6 +243,19 @@ export function CommunicationSection({
                   Open in Gmail <ExternalLink className="size-4" aria-hidden="true" />
                 </Button>
                 {!to && <span className="text-meta text-text-secondary">Add the recipient in Gmail</span>}
+                {factsOpen && stage !== "REPORT" && (
+                  <RecordCommunicationDialog
+                    issueId={issueId}
+                    version={version}
+                    notificationDone={notificationDone}
+                    contacts={contacts}
+                    prefilledMessage={`Facts for ${entityName}'s regulator: what failed, when it started, who is affected and what Corvane has done so far.`}
+                    viewerZone={viewerZone}
+                    triggerVariant="secondary"
+                    triggerLabel="Record facts pack"
+                    fixedType="FACTS_PACK_SENT"
+                  />
+                )}
                 <span className="flex-1" />
                 {stage === "REPORT" && reportDialog ? (
                   <RecordReportSentDialog

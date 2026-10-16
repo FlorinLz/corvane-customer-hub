@@ -13,6 +13,7 @@ import { AcknowledgeButton } from "@/components/issues/AcknowledgeButton";
 import { ChangeStatusDialog } from "@/components/issues/ChangeStatusDialog";
 import { RecordAssessmentDialog } from "@/components/issues/RecordAssessmentDialog";
 import { RecordReportSentDialog } from "@/components/issues/RecordReportSentDialog";
+import { RestoreServiceDialog } from "@/components/issues/RestoreServiceDialog";
 import { TimeBlock } from "@/components/issues/TimeBlock";
 import { useActionFocus } from "@/components/issues/ActionFocus";
 import type { ReportDialogData } from "@/components/issues/ActionPlan";
@@ -72,6 +73,15 @@ export function YourNextAction({
           Go to the message
         </Button>
       );
+    } else if (key === "update" || key === "facts" || key === "chase" || key === "reply") {
+      // The message panel holds the text and the Record button of each of these; this one takes the person there.
+      button = (
+        <Button data-onboarding={key === "update" ? "send-update" : "go-to-message"} variant={rowVariant} onClick={scrollToMessage}>
+          {key === "update" ? "Send update" : key === "facts" ? "Send facts" : key === "chase" ? "Chase the partner" : "Reply to the customer"}
+        </Button>
+      );
+    } else if (key === "restore") {
+      button = <RestoreServiceDialog issueId={issueId} version={version} viewerZone={zone} />;
     } else if (key === "assess") button = <RecordAssessmentDialog issueId={issueId} triggerVariant="primary" />;
     else if (key === "investigate" && mine.via) {
       button = (
@@ -125,7 +135,7 @@ export function YourNextAction({
           {mine ? `Your role on ${displayId}: ${mine.role}` : other ? `Next step: ${other.role}, ${other.person.name}: ${other.label}` : "No open steps"}
         </p>
       </div>
-      <div>{shown && <TimeBlock dueAt={shown.dueAt} now={now} zone={zone} note={note} dateOnly={shown.dateOnly} testId="next-action-time" />}</div>
+      <div>{shown && <TimeBlock dueAt={shown.dueAt} now={now} zone={zone} note={note} dateOnly={shown.dateOnly} soonAt={shown.clock?.soonAt} paused={shown.paused ? { label: shown.paused.label } : null} testId="next-action-time" />}</div>
       <div className="flex min-[1101px]:justify-end">{button}</div>
       {mine?.key === "investigate" && !mine.via && (
         <ChangeStatusDialog issueId={issueId} version={version} currentStatus={status} initialStatus="RESOLVED" eventNeeded={eventNeeded} controlled={{ open: resolveOpen, onOpenChange: setResolveOpen }} />

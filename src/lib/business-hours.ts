@@ -41,8 +41,13 @@ export const userCalendar = (u: { timeZone: string; team: Team }): Calendar => t
 
 /** "YYYY-MM-DD" of `instant` in `zone`. */
 function localDateIn(instant: Date, zone: string): string {
-  return new Intl.DateTimeFormat("en-CA", { timeZone: zone, year: "numeric", month: "2-digit", day: "2-digit" }).format(instant);
+  let f = dateFormats.get(zone);
+  if (!f) dateFormats.set(zone, (f = new Intl.DateTimeFormat("en-CA", { timeZone: zone, year: "numeric", month: "2-digit", day: "2-digit" })));
+  return f.format(instant);
 }
+
+/** One formatter per zone: building one is far slower than formatting with it, and Home does thousands of these. */
+const dateFormats = new Map<string, Intl.DateTimeFormat>();
 
 /** ISO weekday (1 = Monday ... 7 = Sunday) of a plain "YYYY-MM-DD" calendar date. */
 function isoWeekdayOfDate(localDate: string): number {

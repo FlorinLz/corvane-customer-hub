@@ -130,6 +130,9 @@ const KEVIN = { persona: "kevin.lim@corvane.example", personaName: "Kevin Lim" }
 const MEI = { persona: "mei.chen@corvane.example", personaName: "Mei Chen" };
 
 
+/** The updates the seed already holds on ISS-1042 (Kevin's, overnight): the Update step is done once there are more (tests/unit/onboarding-content.test.ts keeps this equal to the seed). */
+export const SEEDED_ISS1042_UPDATES = 3;
+
 /** The part of the update message's last open line that the person completes (src/server/issues/stage-message.ts; a unit test keeps the two the same). */
 export const UPDATE_PLACEHOLDER = "[one line to complete before sending]";
 /** In a move's `fill`: the example link on the approved document host, and the event date and time (the viewer's zone, 90 minutes before now). */
@@ -167,31 +170,31 @@ export const SCENARIOS: Record<ScenarioId, Scenario> = {
         scenario: 1,
         title: "The morning after",
         prologue: [
-          "Monday, 10:05. Emma Wilson starts her day in Customer Success. Overnight, every name check for Banca Monte dei Paschi di Siena (MPS) failed, and Kevin Lim in Ops handled it.",
+          "Monday, 10:05. Emma Wilson starts her day in Customer Success. Overnight, every name check for Banca Monte dei Paschi di Siena (MPS) failed. Kevin Lim in Ops restored the service at 22:30 and kept MPS up to date.",
           "Without one shared place, Emma would rebuild the night from Kevin's emails, a chat thread and the monitoring tool while MPS waits for news. Here is her morning in Customer Hub.",
         ],
         steps: [
           {
             id: "s1-home",
             title: "Start on Home as Emma Wilson",
-            text: "Emma speaks for Corvane to MPS. ISS-1042 sits at the top of her Home, waiting on Kevin, who is still investigating.",
+            text: "Emma speaks for Corvane to MPS. ISS-1042 sits at the top of her Home: the service is back, Kevin is monitoring, and her next update to MPS is due soon.",
             ...EMMA,
             check: "viewed",
             moves: [
               goHome("h-home"),
-              read("h-row", HOME, "issue-row~ISS-1042", "Emma's issue. It waits on Kevin, still investigating."),
+              read("h-row", HOME, "issue-row~ISS-1042", "Emma's issue. Service is back; her next update to MPS is due soon."),
             ],
           },
           {
             id: "s1-issue",
             title: "Open ISS-1042",
-            text: "Emma has nothing due on ISS-1042, and can see who is next. The Action plan shows the night in process order: the alert, Kevin's acknowledgement 9 minutes later, the customer told within the hour.",
+            text: "Emma's own step on ISS-1042 is the next customer update, with its deadline. The Action plan shows the night in process order: the alert, Kevin's acknowledgement 9 minutes later, the customer told within the hour, the service restored at 22:30.",
             ...EMMA,
             check: "viewed",
             moves: [
               click("i-open", HOME, "issue-row~ISS-1042", "Click **ISS-1042**", { doneWhen: "route", arrive: issueAt("iss1042"), nav: true }),
-              read("i-next", issueAt("iss1042"), "next-action", "Nothing due for Emma. Kevin owns the next step."),
-              read("i-plan", issueAt("iss1042"), "action-plan", "Overnight, in order: alert, Kevin acknowledged in 9 minutes, customer told within the hour."),
+              read("i-next", issueAt("iss1042"), "next-action", "Emma's next action is the MPS update, with its deadline."),
+              read("i-plan", issueAt("iss1042"), "action-plan", "Overnight, in order: alert, acknowledged in 9 minutes, customer told, service restored at 22:30."),
             ],
           },
           {
@@ -207,22 +210,22 @@ export const SCENARIOS: Record<ScenarioId, Scenario> = {
           {
             id: "s1-compliance",
             title: "Look at the Compliance card",
-            text: "MPS is a bank under DORA, so ISS-1042 is flagged for Compliance. Mei Chen assessed it as a possible major incident: MPS may have to report it to its regulator and needs the facts from Corvane within 2 hours.",
+            text: "MPS is a bank under DORA, so ISS-1042 is flagged for Compliance. Mei Chen assessed it as a possible major incident: MPS may have to report it to its regulator and needed the facts from Corvane within 2 hours. Kevin sent them at 22:40.",
             ...EMMA,
             check: "viewed",
             moves: [
               read("c-card", issueAt("iss1042"), "compliance-card", "MPS is under DORA. Compliance assessed a possible major incident."),
-              read("c-obl", issueAt("iss1042"), "customer-obligations", "MPS needs the facts from Corvane within 2 hours."),
+              read("c-obl", issueAt("iss1042"), "customer-obligations", "MPS needed the facts within 2 hours. Kevin sent them at 22:40."),
             ],
           },
           {
             id: "s1-update",
             title: "Send the Update",
-            text: "MPS is owed an Update. Emma sends it and records it, and the Communication log shows it at once, with her name and the time.",
+            text: "MPS is owed an Update every 4 hours until the issue is resolved. Emma sends the next one and records it: the clock restarts, and the Communication log shows it at once, with her name and the time.",
             ...EMMA,
             check: "data",
             moves: [
-              type("u-type", issueAt("iss1042"), "message-body", "Write what Ops is doing now.", "Ops renewed the expired certificate and is watching the endpoint.", { replace: UPDATE_PLACEHOLDER }),
+              type("u-type", issueAt("iss1042"), "message-body", "Write what Ops is doing now.", "The certificate is renewed and Ops keeps watching the endpoint.", { replace: UPDATE_PLACEHOLDER }),
               click("u-copy", issueAt("iss1042"), "copy-message", "Click **Copy message**"),
               click("u-record", issueAt("iss1042"), "record-communication", "Click **Record update**"),
               channel("u-channel", issueAt("iss1042")),
@@ -420,7 +423,9 @@ export const SCENARIOS: Record<ScenarioId, Scenario> = {
             moves: [
               goHome("rs-home"),
               click("rs-row", HOME, "issue-row~@partner", "Click the partner issue row", { doneWhen: "route", arrive: issueAt("partner"), nav: true }),
-              click("rs-open", issueAt("partner"), "next-action/resolve", "Click **Resolve**"),
+              // Lukas's next action on the partner issue is its next clock (Chase, then Restore service), so Resolve starts from Change status.
+              click("rs-open", issueAt("partner"), "change-status", "Click **Change status**"),
+              pick("rs-status", issueAt("partner"), "status-option~Resolved", "Pick **Resolved**", "Resolved"),
               type("rs-cause", issueAt("partner"), "resolve-root-cause", "Write the root cause.", "Lloyds CoP gateway overloaded after a configuration change on their side."),
               type("rs-solution", issueAt("partner"), "resolve-solution", "Write the solution.", "Lloyds rolled back the change. Response times are back under one second."),
               type("rs-event-date", issueAt("partner"), "resolve-event-date", "Set the event date.", EVENT_DATE_TOKEN, { optional: true }),

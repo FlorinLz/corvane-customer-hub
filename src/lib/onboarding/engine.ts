@@ -167,7 +167,8 @@ export function pickMove(i: EngineInput): Pick {
       if (m.optional) continue;
       for (let back = idx - 1; back >= 0; back--) {
         const opener = moves[back];
-        if (opener.kind === "click" && i.done.has(opener.id) && i.present.has(opener.id) && matches(opener.where, i.route)) return { kind: "move", move: opener, index: back };
+        // Only a click that opens something (a dialog, a list): a navigation move is not offered again, the page it led to may just be loading.
+        if (opener.kind === "click" && opener.doneWhen === "click" && !opener.nav && i.done.has(opener.id) && i.present.has(opener.id) && matches(opener.where, i.route)) return { kind: "move", move: opener, index: back };
       }
       return { kind: "waiting", move: m };
     }

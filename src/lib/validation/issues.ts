@@ -99,6 +99,14 @@ export const editDescriptionSchema = z.object({
 });
 export type EditDescriptionInput = z.infer<typeof editDescriptionSchema>;
 
+/** Service restored (the deadline model): when the service was back, and a short note. Owner only, not before Corvane aware at, not in the future. */
+export const restoreIssueSchema = z.object({
+  restoredAt: z.string(),
+  note: z.string().trim().max(500, "Note must be 500 characters or fewer").optional(),
+  version: z.number().int(),
+});
+export type RestoreIssueInput = z.infer<typeof restoreIssueSchema>;
+
 /** M21 AC1. */
 export const acknowledgeIssueSchema = z.object({ version: z.number().int() });
 export type AcknowledgeIssueInput = z.infer<typeof acknowledgeIssueSchema>;
@@ -179,7 +187,7 @@ export type AddIssueNoteInput = z.infer<typeof addIssueNoteSchema>;
 /** M22 AC6, AC7. Person is a contact of the entity (contactId) or free text (personName), never both. */
 export const recordCommunicationSchema = z
   .object({
-    type: z.enum([CommunicationType.FIRST_NOTIFICATION, CommunicationType.UPDATE]),
+    type: z.enum([CommunicationType.FIRST_NOTIFICATION, CommunicationType.UPDATE, CommunicationType.FACTS_PACK_SENT]),
     occurredAt: z.string(),
     channel: z.enum(CommunicationChannel),
     contactId: z.string().optional(),

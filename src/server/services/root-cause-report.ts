@@ -7,6 +7,8 @@ import { addHistoryMany } from "@/server/audit/history";
 import { mutate } from "@/server/audit/mutate";
 import { versionConflictMessage } from "@/server/audit/conflict";
 import { now, formatDate, toLocalDate } from "@/lib/dates";
+import { addBusinessMinutes, teamCalendar, type Calendar } from "@/lib/business-hours";
+import { BUSINESS_DAY_MINUTES, REPORT_DEFAULT_BUSINESS_DAYS } from "@/server/config";
 import { effectiveTimeZone, formatInZone } from "@/lib/time-zones";
 import { COMMUNICATION_CHANNEL_LABELS, TEAM_LABELS, issueDisplayId } from "@/lib/labels";
 import type { ApproveReportInput, RecordReportSentInput, RequestChangesInput, ShareDraftInput } from "@/lib/validation/issues";
@@ -21,9 +23,12 @@ import type { SessionUser } from "@/server/permissions/can";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-/** The task's deadline: resolution time + the card's days, in calendar days of 24 h (M27 AC3). */
-export function reportDueAt(resolvedAt: Date, reportDays: number | null): Date | null {
-  return reportDays === null ? null : new Date(resolvedAt.getTime() + reportDays * DAY_MS);
+/**
+ * The task's deadline: resolution time + the card's days, in calendar days of 24 h (M27 AC3). When the card names no period, 10 business days of the
+ * owner's calendar (REPORT_DEFAULT_BUSINESS_DAYS; DORA's final report is due at one month).
+ */
+export function reportDueAt(resolvedAt: Date, reportDays: number | null, ownerCalendar: Calendar): Date {
+  return reportDays === null ? addBusinessMinutes(resolvedAt, REPORT_DEFAULT_BUSINESS_DAYS * BUSINESS_DAY_MINUTES, ownerCalendar) : new Date(resolvedAt.getTime() + reportDays * DAY_MS);
 }
 
 /**
@@ -51,6 +56,8 @@ export async function createReportTasksIfDue(
       entityId: true,
       severity: true,
       ownerId: true,
+      ownerTeam: true,
+      owner: { select: { timeZone: true, team: true } },
       communicatorRule: true,
       contributors: { where: { removedAt: null }, select: { userId: true } },
       rootCauseTask: { select: { id: true } },
@@ -85,9 +92,9 @@ export async function createReportTasksIfDue(
     if (regime === null || regime === "NONE") continue; // not captured: the issue shows the muted line (AC2); None: nothing
 
     const reportDays = card?.postIncidentReportDays ?? null;
-    const dueAt = reportDueAt(params.resolvedAt, reportDays);
-    const dueLocal = dueAt ? toLocalDate(dueAt) : null;
-    tasks.push({ issueId: issue.id, createdAt: params.resolvedAt, reportDays, dueAt, dueDate: dueLocal ? new Date(dueLocal) : null });
+    const dueAt = reportDueAt(params.resolvedAt, reportDays, teamCalendar(issue.ownerTeam, issue.owner));
+    const dueLocal = toLocalDate(dueAt);
+    tasks.push({ issueId: issue.id, createdAt: params.resolvedAt, reportDays, dueAt, dueDate: new Date(dueLocal) });
 
     const actionId = randomUUID();
     const objectLabel = `Issue: ${issueDisplayId(issue.number)}`;
@@ -96,8 +103,8 @@ export async function createReportTasksIfDue(
       ...common,
       fields: createFields({
         "Root cause report task": "Created",
-        "Root cause report due": dueLocal ? formatDate(dueLocal) : "No deadline",
-        "Post-incident report due (days)": reportDays !== null ? `${reportDays} days` : null,
+        "Root cause report due": formatDate(dueLocal),
+        "Post-incident report due (days)": reportDays !== null ? `${reportDays} days` : `${REPORT_DEFAULT_BUSINESS_DAYS} business days (the contract names none)`,
       }),
     });
 
@@ -111,7 +118,7 @@ export async function createReportTasksIfDue(
     history.push({
       entityId: issue.entityId,
       category: "INCIDENT",
-      summary: dueLocal ? `Root cause report task created, due ${formatDate(dueLocal)}` : "Root cause report task created, no deadline",
+      summary: `Root cause report task created, due ${formatDate(dueLocal)}`,
       actionId,
       createdAt: params.resolvedAt,
       issueId: issue.id,

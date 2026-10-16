@@ -56,7 +56,7 @@ export function IssueActionsBar({
     <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Issue actions">
       <span className="mr-1 text-meta text-text-secondary">Issue actions</span>
       <span className="inline-flex items-center gap-2">
-        <Button variant="secondary" disabled={statusDisabled} disabledReason={statusReason} aria-describedby={statusReason ? "change-status-reason" : undefined} onClick={() => setOpenDialog("status")}>
+        <Button data-onboarding="change-status" variant="secondary" disabled={statusDisabled} disabledReason={statusReason} aria-describedby={statusReason ? "change-status-reason" : undefined} onClick={() => setOpenDialog("status")}>
           Change status
         </Button>
         {statusReason && <DisabledReason id="change-status-reason">{statusReason}</DisabledReason>}

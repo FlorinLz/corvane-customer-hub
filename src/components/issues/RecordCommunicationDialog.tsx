@@ -38,6 +38,7 @@ export function RecordCommunicationDialog({
   viewerZone,
   triggerVariant = "primary",
   triggerLabel = "Record notification",
+  fixedType,
 }: {
   issueId: string;
   version: number;
@@ -47,10 +48,12 @@ export function RecordCommunicationDialog({
   viewerZone: string;
   triggerVariant?: "primary" | "secondary";
   triggerLabel?: string;
+  /** The dialog records this one type and shows no Type choice ("Facts pack sent", for the regulator). */
+  fixedType?: CommunicationType;
 }) {
   const router = useRouter();
   const [open, setOpen] = React.useState(false);
-  const [type, setType] = React.useState<CommunicationType>(notificationDone ? "UPDATE" : "FIRST_NOTIFICATION");
+  const [type, setType] = React.useState<CommunicationType>(fixedType ?? (notificationDone ? "UPDATE" : "FIRST_NOTIFICATION"));
   const [date, setDate] = React.useState(() => splitInZone(now(), viewerZone).date);
   const [time, setTime] = React.useState(() => splitInZone(now(), viewerZone).time);
   const [channel, setChannel] = React.useState<CommunicationChannel | "">("");
@@ -61,7 +64,7 @@ export function RecordCommunicationDialog({
   const [pending, setPending] = React.useState(false);
 
   function reset() {
-    setType(notificationDone ? "UPDATE" : "FIRST_NOTIFICATION");
+    setType(fixedType ?? (notificationDone ? "UPDATE" : "FIRST_NOTIFICATION"));
     const t = splitInZone(now(), viewerZone);
     setDate(t.date);
     setTime(t.time);
@@ -97,7 +100,7 @@ export function RecordCommunicationDialog({
         return;
       }
       setOpen(false);
-      toast.success(type === "FIRST_NOTIFICATION" ? "Notification recorded" : "Update recorded");
+      toast.success(type === "FIRST_NOTIFICATION" ? "Notification recorded" : type === "FACTS_PACK_SENT" ? "Facts pack recorded" : "Update recorded");
       router.refresh();
     } finally {
       setPending(false);
@@ -128,11 +131,11 @@ export function RecordCommunicationDialog({
         if (next) reset();
       }}
     >
-      <Button data-onboarding="record-communication" variant={triggerVariant} onClick={() => setOpen(true)}>{triggerLabel}</Button>
+      <Button data-onboarding={fixedType ? "record-facts" : "record-communication"} variant={triggerVariant} onClick={() => setOpen(true)}>{triggerLabel}</Button>
       <DialogContent>
-        <DialogHeader>Record notification</DialogHeader>
+        <DialogHeader>{fixedType === "FACTS_PACK_SENT" ? "Record facts pack" : "Record notification"}</DialogHeader>
         <DialogBody>
-          <div className="flex flex-col gap-1">
+          {!fixedType && <div className="flex flex-col gap-1">
             <span className="text-meta text-text-secondary">Type</span>
             <div className="flex gap-1" role="radiogroup" aria-label="Type">
               {(["FIRST_NOTIFICATION", "UPDATE"] as const).map((t) => (
@@ -146,7 +149,7 @@ export function RecordCommunicationDialog({
                 </button>
               ))}
             </div>
-          </div>
+          </div>}
           <div className="flex flex-col gap-1">
             <span className="text-meta text-text-secondary">Time</span>
             <div className="flex items-center gap-2">
@@ -220,8 +223,8 @@ export function RecordCommunicationDialog({
           <Button variant="secondary" onClick={() => setOpen(false)} disabled={pending}>
             Cancel
           </Button>
-          <Button data-onboarding="record-communication-submit" disabled={!valid} disabledReason={blockedReason ?? undefined} aria-describedby={blockedReason ? "record-blocked-reason" : undefined} loading={pending} onClick={() => void save()}>
-            Record notification
+          <Button data-onboarding={fixedType ? "record-facts-submit" : "record-communication-submit"} disabled={!valid} disabledReason={blockedReason ?? undefined} aria-describedby={blockedReason ? "record-blocked-reason" : undefined} loading={pending} onClick={() => void save()}>
+            {fixedType === "FACTS_PACK_SENT" ? "Record facts pack" : "Record notification"}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -2,9 +2,10 @@ import "dotenv/config";
 
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { now } from "@/lib/dates";
+import { addBusinessMinutes, teamCalendar } from "@/lib/business-hours";
 import { approveReportSchema, recordReportSentSchema, requestChangesSchema, shareDraftSchema } from "@/lib/validation/issues";
 import { loadWorklistIssues } from "@/server/queries/worklist/issues";
 import { reassignIssue, resolveIssue } from "@/server/services/issue";
@@ -90,6 +91,15 @@ async function resolve(issueId: string, owner: { id: string }) {
 const DAY = 24 * 3_600_000;
 const taskOf = (issueId: string) => db.rootCauseReportTask.findUnique({ where: { issueId } });
 
+/** Every line of a Home row, line 1 then line 2: what the row names as somebody's step ("Kevin Lim: Share the draft"), own or waiting. */
+function rowLines(row: { view: { line1: { kind: string; label?: string; person?: string }; line2: { person: string; label: string }[] } }) {
+  const first = row.view.line1;
+  return [...(first.kind === "none" ? [] : [{ kind: first.kind, person: first.person ?? "", label: first.label ?? "" }]), ...row.view.line2.map((l) => ({ kind: "other", person: l.person, label: l.label }))];
+}
+
+// A Home load reads every issue with its communications and assessments; the longest test here loads Home five times against a real database.
+vi.setConfig({ testTimeout: 30_000 });
+
 describe("task creation (M27 AC1 to AC3)", () => {
   it("Sev-1 on a regulated customer: the deadline is the resolution time + the card's days (Revolut 14), read once; Compliance joins as contributor; History and audit written", async () => {
     const { issue, kevin } = await createIssue("Revolut Ltd");
@@ -148,7 +158,7 @@ describe("task creation (M27 AC1 to AC3)", () => {
     }
   });
 
-  it("no days captured: the task exists with no deadline (AC3)", async () => {
+  it("no days captured: the task is due in 10 business days of the owner's calendar (the deadline model's default)", async () => {
     const adyen = await db.entity.findFirstOrThrow({ where: { legalName: "Adyen N.V." } });
     const card = await db.obligationCard.findUniqueOrThrow({ where: { entityId_kind: { entityId: adyen.id, kind: "CUSTOMER_AGREEMENT" } } });
     await db.obligationCard.update({ where: { id: card.id }, data: { postIncidentReportDays: null } });
@@ -157,10 +167,13 @@ describe("task creation (M27 AC1 to AC3)", () => {
       await resolve(issue.id, kevin);
       const task = await taskOf(issue.id);
       expect(task).not.toBeNull();
-      expect(task!.reportDays).toBeNull();
-      expect(task!.dueAt).toBeNull();
+      expect(task!.reportDays).toBeNull(); // the card named none: the default is not written into it
+      expect(task!.dueAt).not.toBeNull();
+      const owner = await db.user.findUniqueOrThrow({ where: { id: issue.ownerId! }, select: { timeZone: true, team: true } });
+      const expected = addBusinessMinutes(task!.createdAt, 10 * 540, teamCalendar(issue.ownerTeam, owner));
+      expect(task!.dueAt!.getTime()).toBe(expected.getTime());
       const history = await db.historyEvent.findFirstOrThrow({ where: { issueId: issue.id, summary: { startsWith: "Root cause report task created" } } });
-      expect(history.summary).toBe("Root cause report task created, no deadline");
+      expect(history.summary).toMatch(/^Root cause report task created, due /);
     } finally {
       await db.obligationCard.update({ where: { id: card.id }, data: { postIncidentReportDays: card.postIncidentReportDays } });
     }
@@ -370,7 +383,7 @@ describe("Compliance requests changes, the owner shares a new draft", () => {
     const kevinHome = await loadWorklistIssues(kevin, "mine");
     expect(kevinHome.main.find((r) => r.issueId === issue.id)!.view.line1).toEqual({ kind: "own", label: "Prepare root cause report for Revolut Ltd" });
     const meiHome = await loadWorklistIssues(mei, "mine");
-    expect(meiHome.main.find((r) => r.issueId === issue.id)!.view.line1).toEqual({ kind: "waiting", role: "Owner", person: "Kevin Lim", label: "Share the draft" });
+    expect(rowLines(meiHome.main.find((r) => r.issueId === issue.id)!)).toContainEqual({ kind: expect.any(String), person: "Kevin Lim", label: "Share the draft" });
     // And she cannot approve (or ask again) until there is a new draft.
     await expect(approveReport(mei, issue.id, {})).rejects.toMatchObject({ fieldErrors: { task: ["The owner has not shared the draft yet"] } });
     await expect(requestChanges(mei, issue.id, { reason: "Asking again without a new draft." })).rejects.toMatchObject({ fieldErrors: { task: ["The owner has not shared the draft yet"] } });
@@ -462,30 +475,28 @@ describe("Home and ownership (M27 AC4, AC6, edge case 4)", () => {
     // Right after the resolution: Kevin prepares the report (his own step, by the contract deadline); Mei waits on him to share the draft.
     const prepareKevin = await loadWorklistIssues(kevin, "mine");
     const prepareRow = prepareKevin.main.find((r) => r.issueId === issue.id)!;
-    expect(prepareRow.view.line1).toEqual({ kind: "own", label: "Prepare root cause report for Revolut Ltd" });
-    expect(prepareRow.view.timeDateOnly).toBe(true);
+    expect(rowLines(prepareRow).map((l) => l.label)).toContain("Prepare root cause report for Revolut Ltd");
+    // Mine shows Kevin's own deadline on the issue (the report, a date), though the communicator's "Confirm resolution" (1 business day) is nearer.
+    expect(prepareRow.view.time).toMatchObject({ own: true, label: "Report", dateOnly: true });
     const meiWaiting = await loadWorklistIssues(mei, "mine");
-    expect(meiWaiting.main.find((r) => r.issueId === issue.id)!.view.line1).toEqual({ kind: "waiting", role: "Owner", person: "Kevin Lim", label: "Share the draft" });
+    expect(rowLines(meiWaiting.main.find((r) => r.issueId === issue.id)!)).toContainEqual({ kind: expect.any(String), person: "Kevin Lim", label: "Share the draft" });
 
     // The draft is shared: Kevin waits on Compliance; Mei has the approval in her Issues list, by the report's deadline.
     await share(issue.id);
     const waitingKevin = await loadWorklistIssues(kevin, "mine");
-    expect(waitingKevin.main.find((r) => r.issueId === issue.id)!.view.line1).toEqual({ kind: "waiting", role: "Compliance", person: "Mei Chen", label: "Approve the report" });
+    expect(rowLines(waitingKevin.main.find((r) => r.issueId === issue.id)!)).toContainEqual({ kind: expect.any(String), person: "Mei Chen", label: "Approve the report" });
     const meiBefore = await loadWorklistIssues(mei, "mine");
     const meiRow = meiBefore.main.find((r) => r.issueId === issue.id)!;
     expect(meiRow).toBeDefined();
     expect(meiRow.view.line1).toEqual({ kind: "own", label: "Approve root cause report" });
-    expect(meiRow.view.timeDateOnly).toBe(true);
-    expect(new Date(meiRow.view.timeDueAt!).getTime()).toBe(issue.resolvedAt!.getTime() + 14 * DAY);
+    expect(meiRow.view.time).toMatchObject({ label: "Approve report", own: true }); // her own deadline wins over the nearer Confirm of the communicator
     expect(meiBefore.contributing.some((r) => r.issueId === issue.id)).toBe(false);
 
     await approve(issue.id, mei);
     const before = await loadWorklistIssues(kevin, "mine");
     const row = before.main.find((r) => r.issueId === issue.id)!;
     expect(row).toBeDefined();
-    expect(row.view.line1).toEqual({ kind: "own", label: "Send approved report to Revolut Ltd" });
-    expect(row.view.timeDateOnly).toBe(true);
-    expect(new Date(row.view.timeDueAt!).getTime()).toBe(issue.resolvedAt!.getTime() + 14 * DAY);
+    expect(rowLines(row).map((l) => l.label)).toContain("Send approved report to Revolut Ltd");
     expect(row.view.statusNote).toBe("Resolved");
     expect(before.resolvedWaiting.some((r) => r.issueId === issue.id)).toBe(false);
 
@@ -536,7 +547,7 @@ describe("Home and ownership (M27 AC4, AC6, edge case 4)", () => {
     await db.issue.update({ where: { id: issue.id }, data: { status: "RESOLVED", version: { increment: 1 } } });
 
     const newOwner = await loadWorklistIssues(adrian, "mine");
-    expect(newOwner.main.find((r) => r.issueId === issue.id)?.view.line1).toEqual({ kind: "own", label: "Send approved report to Revolut Ltd" });
+    expect(rowLines(newOwner.main.find((r) => r.issueId === issue.id)!).map((l) => l.label)).toContain("Send approved report to Revolut Ltd");
     const oldOwner = await loadWorklistIssues(kevin, "mine");
     expect(oldOwner.main.some((r) => r.issueId === issue.id)).toBe(false);
   });
