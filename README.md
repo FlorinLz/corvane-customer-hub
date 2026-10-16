@@ -27,7 +27,7 @@ In the scenario panel only the current step is open. A bubble next to the elemen
 
 ### Architecture
 
-Next.js 16 (App Router) and TypeScript, Prisma 7, Postgres on Neon, hosted on Vercel. Four things exist only for a public demo:
+Next.js 16 (App Router) and TypeScript, Prisma 7, Postgres on Neon, hosted on Vercel. Vercel Web Analytics counts page views (cookieless, no personal data). Four things exist only for a public demo:
 
 - **Demo clock.** Each visitor starts at the same demo moment and their clock runs from their arrival, so the seeded deadlines always make sense.
 - **Snapshot restore.** `data/demo-snapshot.js` holds every row after the seed; restoring it is one transaction under an advisory lock. It restores the shared (public) schema, and a visitor's own schema when they press Start over.

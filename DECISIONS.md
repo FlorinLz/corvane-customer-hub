@@ -3144,3 +3144,11 @@ Home often showed a dash in the Time column, for two reasons. The column only sh
 **Seed (Mon 05 Oct 2026, 10:05 CEST).** ISS-1042 was restored at 22:30, Kevin sent the facts at 22:40 (within the contract's 2 h) and updated MPS at 23:00, 02:30 and 06:30, so Emma's next update is due at 10:30. ISS-1038 has Adrian's updates (next due 17:45 Kuala Lumpur), ISS-1020 has Lukas's contacts with ING-DiBa (chase due 16:30 Singapore) and a Friday-evening start so Restore is not overdue. No seeded persona has more than two red rows.
 
 **Default root cause report deadline.** When the Customer agreement card names no `postIncidentReportDays`, the task is due in 10 business days of the owner's calendar. The card is not changed: `reportDays` stays null so the page can say the contract named none.
+
+## Vercel Web Analytics (PR "vercel-analytics")
+
+The app renders `<Analytics />` from `@vercel/analytics/next` once, in the root layout, through the `PageViews` wrapper. It counts page views only. It sets no cookies and sends no custom events or props, so no names, emails or View as persona leave the app. Custom events need the Pro plan, and nothing here needs them.
+
+**No personal data in URLs.** Path segments are database ids and the Next.js integration reports the route pattern (`/issues/[issueId]`), not the id. The only query strings are `/search?q=`, `?reported=1`, `?page=` and `?status=`; `PageViews` (a small client wrapper) strips the query and hash from the URL in `beforeSend`, so what a visitor typed in search is never sent. View as and the sandbox use cookies and POST requests, never the URL.
+
+**Off outside Vercel.** The layout renders it only when `VERCEL` is set, which Vercel sets itself. The e2e suite runs production builds, where the component alone would be active, so local and CI runs never load or wait on `/_vercel/insights/script.js`. The app sets no Content-Security-Policy (not in `next.config.ts`, `vercel.json` or any route), so nothing blocks that path.
