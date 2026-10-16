@@ -5,6 +5,7 @@ import { MobileNotice } from "@/components/onboarding/MobileNotice";
 import { OnboardingHost } from "@/components/onboarding/OnboardingHost";
 import { DemoStrip } from "@/components/shell/DemoStrip";
 import { PreparingDemo } from "@/components/shell/PreparingDemo";
+import { PageViews } from "@/components/shell/PageViews";
 import { TopBar } from "@/components/shell/TopBar";
 import { Toaster } from "@/components/ui/toaster";
 import { now } from "@/lib/dates";
@@ -76,6 +77,8 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         </main>
         {demoMode && <OnboardingHost currentEmail={user.email} />}
         <Toaster />
+        {/* Page views only, cookieless, no props. Only on Vercel (VERCEL is set there): the e2e suite runs production builds, which must not load the script. */}
+        {process.env.VERCEL && <PageViews />}
       </body>
     </html>
   );
