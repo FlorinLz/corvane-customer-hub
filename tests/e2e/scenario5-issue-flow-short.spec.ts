@@ -325,7 +325,7 @@ test.describe("Scenario 5: Issue flow (R1 short spec)", () => {
       await page.screenshot({ path: `${process.env.SHOTS_DIR}/home-adrian-after-partner-scenario-1440.png`, fullPage: true });
     }
     // Role actions PR: line 1 is the action ("Notify <customer>"), the time block the time left.
-    for (const [n, hours] of [[1045, 1], [1047, 7]] as const) {
+    for (const n of [1045, 1047]) {
       const row = await issueRow(page, n);
       await expect(row.locator('[data-testid^="line1-"]')).toHaveText(/^Notify /);
       // Deadline model: the row shows the nearest open deadline, which may be Mei's Assess or Lukas's clock rather than Adrian's Notify.

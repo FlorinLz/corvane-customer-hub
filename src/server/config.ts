@@ -134,6 +134,9 @@ export const CONFIRM_TARGET: Partial<Record<Severity, Target>> = {
   SEV2: { minutes: BD, business: true },
 };
 
+/** Approve root cause report. Compliance. Corvane's own target: 3 business days after the owner shares the draft, never later than the report task's due date. */
+export const REVIEW_TARGET: Target = { minutes: 3 * BD, business: true };
+
 /** Partner chase, repeating, on a partner issue. Owner (Network). ITIL underpinning contracts: chase the partner every hour at Sev-1, 4 business hours at Sev-2, 2 business days at Sev-3. */
 export const PARTNER_CHASE_TARGET: Partial<Record<Severity, Target>> = {
   SEV1: { minutes: 60, business: false },

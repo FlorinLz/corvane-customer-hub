@@ -23,11 +23,12 @@ describe("Home rows, scope Mine", () => {
       expect(row.view.line1.kind).toBe("own");
       expect(row.view.time).not.toBeNull(); // every issue has a running clock: no dash
     }
-    // ISS-1038: Kevin's step is Investigate (a wrong match has no service to restore), and the nearest deadline is Adrian's next customer update.
+    // ISS-1038: Kevin's step is Investigate (a wrong match has no service to restore). He has his own deadline on it (Resolve), so Mine shows that one,
+    // even though Adrian's next customer update is nearer.
     const iss1038 = main.find((r) => r.number === 1038)!;
     expect(iss1038.view.line1).toEqual({ kind: "own", label: "Investigate" });
-    expect(iss1038.view.time).toMatchObject({ own: false, person: "Adrian Koh", label: "Update" });
-    expect(iss1038.view.timePerson).toBe("Adrian Koh");
+    expect(iss1038.view.time).toMatchObject({ own: true, person: "Kevin Lim", label: "Resolve" });
+    expect(iss1038.view.timePerson).toBeNull();
     // ISS-1042: the service is restored, so the nearest deadline is the update, which is Kevin's own until the hand-over at the start of Emma's day.
     expect(main.find((r) => r.number === 1042)!.view.time).toMatchObject({ label: "Update", paused: null });
     expect(viewerZone).toBe("Asia/Kuala_Lumpur");

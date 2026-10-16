@@ -166,12 +166,22 @@ describe("the Home Time column: the issue's nearest open deadline, whoever owns 
     expect(new Date(t.dueAt!)).toEqual(at("2026-10-05T10:30:00+02:00"));
   });
 
-  it("the nearest wins, own or not: a nearer deadline of someone else beats my later one", () => {
-    // Kevin's own Restore (before the restore) is overdue; Emma's update is nearer than nothing, but the overdue one is the nearest.
-    const f = { restoredAt: null, lastUpdateAt: at("2026-10-05T09:40:00+02:00") };
-    const rav = roleActionsFor(issue({ restored: null }, f), emma.id, NOW);
-    const t = pickTime(rav, "mine", "IN_PROGRESS")!;
+  // Kevin's own Restore (before the restore) is overdue and nearer than Emma's update, which is her own deadline on this issue.
+  const nearerOfSomeoneElse = () => roleActionsFor(issue({ restored: null }, { restoredAt: null, lastUpdateAt: at("2026-10-05T09:40:00+02:00") }), emma.id, NOW);
+
+  it("Mine: my own deadline on the issue wins, even when somebody else's is nearer", () => {
+    const t = pickTime(nearerOfSomeoneElse(), "mine", "IN_PROGRESS")!;
+    expect(t).toMatchObject({ own: true, person: "Emma Wilson", label: "Update" });
+  });
+
+  it("My team: the nearest of anyone wins, even when I have a deadline of my own", () => {
+    const t = pickTime(nearerOfSomeoneElse(), "team", "IN_PROGRESS")!;
     expect(t).toMatchObject({ own: false, person: "Kevin Lim", label: "Restore" });
+  });
+
+  it("Mine: with no deadline of my own on the issue, the nearest of anyone's shows, secondary", () => {
+    const rav = roleActionsFor(issue({ restored: null }, { restoredAt: null, lastUpdateAt: at("2026-10-05T09:40:00+02:00") }), "u-nobody", NOW);
+    expect(pickTime(rav, "mine", "IN_PROGRESS")).toMatchObject({ own: false, person: "Kevin Lim", label: "Restore" });
   });
 
   it("in the team scope nothing is 'own': the nearest is shown with its person", () => {
@@ -239,3 +249,28 @@ describe("deadlineFactsOf reads the facts of an issue", () => {
 });
 
 void MIN;
+
+describe("the owner's step is Monitor and resolve once the service is restored", () => {
+  const stepOf = (i: RoleActionIssue) => roleActionsFor(i, kevin.id, NOW).open.find((a) => a.key === "investigate")!;
+
+  it("after Service restored: 'Monitor and resolve ISS-1042', Home short label 'Monitor and resolve'", () => {
+    expect(stepOf(issue())).toMatchObject({ label: "Monitor and resolve ISS-1042", shortLabel: "Monitor and resolve" });
+  });
+
+  it("before it (or on an issue with no restore step): 'Investigate and resolve', short label 'Investigate'", () => {
+    expect(stepOf(issue({ restored: null }, { restoredAt: null }))).toMatchObject({ label: "Investigate and resolve ISS-1042", shortLabel: "Investigate" });
+  });
+});
+
+describe("a waiting Confirm step says its target: 1 business day at Sev-1 and Sev-2, nothing below", () => {
+  const planned = (severity: "SEV1" | "SEV2" | "SEV3") =>
+    roleActionsFor(issue({ planned: true, severity, status: "IN_PROGRESS" }, { severity }), kevin.id, NOW).plan.find((a) => a.key === "close")!;
+
+  it("Sev-1 and Sev-2: '1 business day', after resolution", () => {
+    for (const sev of ["SEV1", "SEV2"] as const) expect(planned(sev)).toMatchObject({ state: "blocked", plannedText: "1 business day", afterNote: "after resolution" });
+  });
+
+  it("Sev-3: no target, so nothing is written (not '10 business days')", () => {
+    expect(planned("SEV3").plannedText).toBeNull();
+  });
+});

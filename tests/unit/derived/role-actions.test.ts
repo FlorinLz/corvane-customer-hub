@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 
+import { addBusinessMinutes, teamCalendar } from "@/lib/business-hours";
+
 import { allRoleActions, compareHomeRows, roleActionsFor, type HomeSortKey, type RoleActionIssue } from "@/server/derived/role-actions";
 import { computeClocks, type ClockResult, type ComputedClocks } from "@/server/derived/issue-clocks";
 
@@ -279,7 +281,7 @@ describe("the root cause report task (M27, M20 AC14 Owner row)", () => {
     expect(v.mine).toHaveLength(1);
     expect(v.mine[0]).toMatchObject({ key: "prepare_report", role: "Owner", label: "Prepare root cause report for Revolut Ltd", dueAt: DUE, dateOnly: true, state: "open" });
     const review = v.blocked.find((a) => a.key === "review_report")!;
-    expect(review).toMatchObject({ role: "Compliance", person: mei, state: "blocked", startsWhen: "Starts when Kevin Lim shares the draft", dueAt: DUE });
+    expect(review).toMatchObject({ role: "Compliance", person: mei, state: "blocked", startsWhen: "Starts when Kevin Lim shares the draft", dueAt: null, plannedText: "3 business days" });
     const send = v.blocked.find((a) => a.key === "send_report")!;
     expect(send).toMatchObject({ role: "Owner", label: "Send approved report to Revolut Ltd", state: "blocked", startsWhen: "Starts when Mei Chen approves", dueAt: DUE, dateOnly: true });
     expect(roleActionsFor(resolvedIssue(), mei.id, NOW).mine).toHaveLength(0);
@@ -289,8 +291,14 @@ describe("the root cause report task (M27, M20 AC14 Owner row)", () => {
     const v = roleActionsFor(resolvedIssue({ reportTask: task(DRAFT) }), kevin.id, NOW);
     expect(v.mine).toHaveLength(0);
     expect(v.done.find((a) => a.key === "prepare_report")!.done).toMatchObject({ label: "Draft shared", byName: "Kevin Lim" });
-    expect(v.open.find((a) => a.key === "review_report")).toMatchObject({ role: "Compliance", person: mei, label: "Approve root cause report", dueAt: DUE, dateOnly: true });
+    expect(v.open.find((a) => a.key === "review_report")).toMatchObject({ role: "Compliance", person: mei, label: "Approve root cause report", dueAt: addBusinessMinutes(DRAFT.draftSharedAt, 1620, teamCalendar("COMPLIANCE")), dateOnly: true });
     expect(roleActionsFor(resolvedIssue({ reportTask: task(DRAFT) }), mei.id, NOW).mine.map((a) => a.key)).toEqual(["review_report"]);
+  });
+
+  it("Approve is due 3 business days after the draft, but never later than the report's own date", () => {
+    const soon = at(24 * 60); // the report is due in a day: sooner than 3 business days
+    const v = roleActionsFor(resolvedIssue({ reportTask: task({ ...DRAFT, dueAt: soon }) }), mei.id, NOW);
+    expect(v.open.find((a) => a.key === "review_report")!.dueAt).toEqual(soon);
   });
 
   it("once approved, the owner has 'Send approved report to <customer>' with the task's deadline, as a date", () => {

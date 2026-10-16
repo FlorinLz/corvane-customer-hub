@@ -126,7 +126,7 @@ function Step({ action, n, viewerId, now, zone, approve }: { action: RoleAction;
         <TimeBlock className="col-start-3 min-[1101px]:col-start-auto" dueAt={action.dueAt} now={now} zone={zone} note={null} testId={`plan-time-${action.key}`} dateOnly={action.dateOnly} />
       ) : blocked ? (
         <div data-testid={`plan-time-${action.key}`} data-state="blocked" className="col-start-3 flex min-w-0 flex-col min-[1101px]:col-start-auto">
-          <span className="text-[16px] leading-6 text-text-secondary">{action.plannedDays != null ? `${action.plannedDays} days` : "10 business days"}</span>
+          <span className="text-[16px] leading-6 text-text-secondary">{action.plannedText !== undefined ? action.plannedText : action.plannedDays != null ? `${action.plannedDays} days` : "10 business days"}</span>
           {action.afterNote && <span className="text-meta text-text-secondary">{action.afterNote}</span>}
         </div>
       ) : (

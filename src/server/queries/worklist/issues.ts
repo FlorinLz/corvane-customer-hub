@@ -334,13 +334,18 @@ const iso = (d: Date | null) => d?.toISOString() ?? null;
 const ownerOf = (a: RoleActionsView["open"][number], rav: RoleActionsView) => rav.mine.includes(a);
 
 /**
- * The deadline the Time column shows: the nearest open one on the issue, whoever owns it. On an issue that is Waiting on partner the partner chase is the
- * visible clock. With no running clock, a paused one ("Paused · Waiting on customer"); with none at all, null.
+ * The deadline the Time column shows. Mine: the viewer's own deadline on the issue when they have one (even if someone else's is nearer), otherwise the
+ * nearest of anyone's. My team: the nearest open one, whoever owns it. On an issue that is Waiting on partner the partner chase is the visible clock.
+ * With no running clock, a paused one ("Paused · Waiting on customer"); with none at all, null.
  */
 export function pickTime(rav: RoleActionsView, scope: "mine" | "team", status: string): RowTime | null {
-  const running = rav.open.filter((a) => a.dueAt !== null);
-  const chase = status === "WAITING_ON_PARTNER" ? running.find((a) => a.key === "chase") : undefined;
-  const lead = chase ?? running[0] ?? rav.open.find((a) => a.paused) ?? null;
+  const pick = (from: RoleActionsView["open"]) => {
+    const running = from.filter((a) => a.dueAt !== null);
+    const chase = status === "WAITING_ON_PARTNER" ? running.find((a) => a.key === "chase") : undefined;
+    return chase ?? running[0] ?? from.find((a) => a.paused) ?? null;
+  };
+  const own = scope === "mine" ? pick(rav.mine) : null;
+  const lead = own ?? pick(rav.open);
   if (!lead) return null;
   return {
     dueAt: iso(lead.dueAt),

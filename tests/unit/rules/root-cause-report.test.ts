@@ -476,8 +476,8 @@ describe("Home and ownership (M27 AC4, AC6, edge case 4)", () => {
     const prepareKevin = await loadWorklistIssues(kevin, "mine");
     const prepareRow = prepareKevin.main.find((r) => r.issueId === issue.id)!;
     expect(rowLines(prepareRow).map((l) => l.label)).toContain("Prepare root cause report for Revolut Ltd");
-    // The Time column shows the issue's nearest deadline whoever owns it: the communicator's "Confirm resolution" (1 business day) comes before the report (14 days).
-    expect(prepareRow.view.time).toMatchObject({ label: "Confirm", dateOnly: false });
+    // Mine shows Kevin's own deadline on the issue (the report, a date), though the communicator's "Confirm resolution" (1 business day) is nearer.
+    expect(prepareRow.view.time).toMatchObject({ own: true, label: "Report", dateOnly: true });
     const meiWaiting = await loadWorklistIssues(mei, "mine");
     expect(rowLines(meiWaiting.main.find((r) => r.issueId === issue.id)!)).toContainEqual({ kind: expect.any(String), person: "Kevin Lim", label: "Share the draft" });
 
@@ -489,7 +489,7 @@ describe("Home and ownership (M27 AC4, AC6, edge case 4)", () => {
     const meiRow = meiBefore.main.find((r) => r.issueId === issue.id)!;
     expect(meiRow).toBeDefined();
     expect(meiRow.view.line1).toEqual({ kind: "own", label: "Approve root cause report" });
-    expect(meiRow.view.time).toMatchObject({ label: "Confirm", own: false }); // somebody else's nearer deadline, in secondary text for Mei
+    expect(meiRow.view.time).toMatchObject({ label: "Approve report", own: true }); // her own deadline wins over the nearer Confirm of the communicator
     expect(meiBefore.contributing.some((r) => r.issueId === issue.id)).toBe(false);
 
     await approve(issue.id, mei);

@@ -60,6 +60,15 @@ test("Emma's Home: ISS-1042 is hers, the next update is due in under an hour (or
   expect(await others.count()).toBeGreaterThan(0);
   const first = others.first();
   await expect(first.locator("span").first()).toHaveText(/\w+ \w+/);
+  // ISS-1029: Mei's Assess (20 min) is nearer than Emma's own update, but Mine shows Emma's own deadline; My team shows the nearest of anyone's.
+  const iss1029 = v.page.getByTestId(`time-block-${issueId(1029)}`);
+  await expect(iss1029).not.toHaveAttribute("data-own", "false"); // her own: bold, not the secondary "someone else" line
+  await expect(iss1029).toContainText("by 10:55 CEST"); // her update, due 10:55 (Mei's Assess is due 10:25)
+  await expect(iss1029).not.toContainText("Mei Chen");
+  await v.page.getByRole("button", { name: "My team" }).click();
+  const team1029 = v.page.getByTestId(`time-block-${issueId(1029)}`);
+  await expect(team1029).toHaveAttribute("data-own", "false");
+  await expect(team1029).toContainText("Mei Chen");
   await v.context.close();
 });
 

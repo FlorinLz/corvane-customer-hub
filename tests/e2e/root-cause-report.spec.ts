@@ -100,9 +100,10 @@ test("right after the resolution, Lukas's Home has 'Prepare root cause report fo
     const row = page.getByTestId(`issue-row-${children[name].id}`);
     await expect(row.getByTestId(`line1-${children[name].id}`)).toHaveText(`Prepare root cause report for ${name}`);
     const tb = row.getByTestId(`time-block-${children[name].id}`);
-    // Deadline model: the row shows the issue's nearest open deadline, here someone else's (the customer's owner, Confirm), not the report date.
-    await expect(tb.locator("span").first()).toHaveText(/^[A-Z][a-z]+ [A-Z][a-z]+$/);
-    await expect(tb).toContainText("Confirm");
+    // Mine shows Lukas's own deadline on the issue, the report, though the communicator's Confirm (1 business day) is nearer.
+    await expect(tb.locator("span").first()).toHaveText(/^(13|14|29|30) days?$/);
+    await expect(tb).toContainText(/by \w{3} \d\d \w{3}$/); // "by Mon 19 Oct": a date, no zone label
+    await expect(tb).not.toContainText("SGT");
     await expect(row).toContainText("Resolved");
   }
   await openMine(page, EMAIL.mei);
@@ -128,7 +129,8 @@ test("the Revolut issue as Lukas before the draft: Prepare is his open step with
   await expect(review).toHaveAttribute("data-state", "blocked");
   await expect(review).toContainText("Approve root cause report");
   await expect(review).toContainText("Starts when Lukas Brenner shares the draft");
-  await expect(review.getByTestId("plan-time-review_report")).toContainText(/by \w{3} \d\d \w{3}$/);
+  await expect(review.getByTestId("plan-time-review_report")).toContainText("3 business days");
+  await expect(review.getByTestId("plan-time-review_report")).toContainText("after the draft is shared");
   const send = wdw.getByTestId("plan-row-send_report");
   await expect(send).toHaveAttribute("data-state", "blocked");
   await expect(send).toContainText("Send approved report to Revolut Ltd");
@@ -187,8 +189,8 @@ test("step 1: the owner shares the draft (link on docs.corvane-internal.example,
   await openMine(page, EMAIL.mei);
   const row = page.getByTestId(`issue-row-${id}`);
   await expect(row.getByTestId(`line1-${id}`)).toHaveText("Approve root cause report");
-  // Deadline model: the row shows the nearest deadline, the communicator's Confirm; the report's own date is on the issue page.
-  await expect(row.getByTestId(`time-block-${id}`)).toContainText("Confirm");
+  // Mei's own deadline: 3 business days after the draft, never later than the report's date.
+  await expect(row.getByTestId(`time-block-${id}`)).toContainText(/by \w{3} \d\d \w{3}$/);
 });
 
 test("step 2: Compliance requests changes (reason required) and the owner prepares a new draft; only Compliance can ask; the refused draft stays in History", async ({ page, request }) => {

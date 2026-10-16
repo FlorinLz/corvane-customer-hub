@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 
+import { addBusinessMinutes, teamCalendar } from "@/lib/business-hours";
+
 import { roleActionsFor, type RoleActionIssue } from "@/server/derived/role-actions";
 import { computeClocks, type IssueClockFields } from "@/server/derived/issue-clocks";
 
@@ -219,7 +221,8 @@ describe("Root cause report steps (M27): prepare, approve, send", () => {
     expect(v.plan.find((a) => a.key === "prepare_report")).toMatchObject({ state: "open", label: "Prepare root cause report for Revolut Ltd", dateOnly: true, dueAt: at(14 * 24 * 60), person: lukas, subLine: "Required by the customer contract: 14 days after resolution" });
     expect(v.next.mine?.key).toBe("prepare_report");
     const review = v.plan.find((a) => a.key === "review_report")!;
-    expect(review).toMatchObject({ state: "blocked", label: "Approve root cause report", startsWhen: "Starts when Lukas Brenner shares the draft", person: mei, dueAt: at(14 * 24 * 60), dateOnly: true });
+    // 3 business days after the draft is shared: no date until then.
+    expect(review).toMatchObject({ state: "blocked", label: "Approve root cause report", startsWhen: "Starts when Lukas Brenner shares the draft", person: mei, dueAt: null, plannedText: "3 business days", afterNote: "after the draft is shared" });
     expect(review.waitLabel).toBe("Approve the report");
     expect(v.plan.find((a) => a.key === "send_report")).toMatchObject({ state: "blocked", label: "Send approved report to Revolut Ltd", startsWhen: "Starts when Mei Chen approves", dueAt: at(14 * 24 * 60), dateOnly: true });
     expect(v.open.find((a) => a.key === "prepare_report")!.waitLabel).toBe("Share the draft");
@@ -229,7 +232,8 @@ describe("Root cause report steps (M27): prepare, approve, send", () => {
     const v = roleActionsFor(resolved({ reportTask: task(DRAFT) }), mei.id, NOW);
     expect(v.done.find((a) => a.key === "prepare_report")!.done).toMatchObject({ label: "Draft shared", byName: "Lukas Brenner", at: at(-8) });
     const review = v.plan.find((a) => a.key === "review_report")!;
-    expect(review).toMatchObject({ state: "open", dateOnly: true, dueAt: at(14 * 24 * 60), subLine: "Approve before the report is sent", subLineBy: at(14 * 24 * 60) });
+    // 3 business days after the draft, and never later than the report's own date (14 days here).
+    expect(review).toMatchObject({ state: "open", dateOnly: true, dueAt: addBusinessMinutes(at(-8), 1620, teamCalendar("COMPLIANCE")), subLine: "Approve before the report is sent", subLineBy: at(14 * 24 * 60) });
     expect(review.person.id).toBe(mei.id);
     expect(v.next.mine?.key).toBe("review_report");
     expect(v.plan.find((a) => a.key === "send_report")).toMatchObject({ state: "blocked", startsWhen: "Starts when Mei Chen approves" });

@@ -62,9 +62,9 @@ test.describe("Home, scope Mine", () => {
     const child = page.getByTestId(`issue-row-${fx.childId}`);
     await expect(child.getByTestId(`line1-${fx.childId}`)).toHaveText("Notify Revolut Ltd");
     const tb = child.getByTestId(`time-block-${fx.childId}`);
-    // Deadline model: the nearest open deadline on the row is Lukas's (Restore or Chase), shown as a secondary line: person, time left, clock.
-    await expect(tb.locator("span").first()).toHaveText(/^[A-Z][a-z]+ [A-Z][a-z]+$/);
-    await expect(tb).toContainText(/\d+ (min|h|days?)/);
+    // Mine shows Adrian's own deadline on the issue (Notify), in his zone, even though Lukas's Acknowledge is nearer.
+    await expect(tb.locator("span").first()).toHaveText(TIME_LEFT);
+    await expect(tb).toContainText(/by (\d\d:\d\d|\w{3} \d\d \w{3}, \d\d:\d\d) MYT/); // Adrian's own zone, label always shown
     await expect(child).toContainText("Linked to " + fx.parentDisplayId);
     await expect(child).toContainText("Sev-1");
     await expect(child).toContainText("UK CoP / GB");
@@ -95,13 +95,16 @@ test.describe("Home, scope Mine", () => {
     await expect(page).toHaveURL(new RegExp(`/issues/${fx.childId}$`));
   });
 
-  test("Kevin Lim: owner of ISS-1038 and ISS-1042 with 'Investigate' and no deadline; only waiting on the linked issue", async ({ page }) => {
+  test("Kevin Lim: owner of ISS-1038 ('Investigate') and ISS-1042 ('Monitor and resolve'); only waiting on the linked issue", async ({ page }) => {
     await goHome(page, EMAIL.kevin);
-    for (const number of ["ISS-1038", "ISS-1042"]) {
+    // ISS-1042 is restored, so Kevin's step is "Monitor and resolve", with no deadline of his own: Mine shows the nearest of anyone's (Emma's update).
+    // ISS-1038 is a wrong match (nothing to restore): "Investigate", and his own Resolve deadline is the one Mine shows.
+    for (const [number, label, own] of [["ISS-1038", "Investigate", true], ["ISS-1042", "Monitor and resolve", false]] as const) {
       const row = await issueRowFor(page, number);
-      await expect(row.locator('[data-testid^="line1-"]')).toHaveText("Investigate");
-      // Deadline model: Kevin has no clock of his own here, so the row shows the nearest one of someone else (the update's communicator).
-      await expect(row.locator('[data-testid^="time-block-"]')).toHaveAttribute("data-own", "false");
+      await expect(row.locator('[data-testid^="line1-"]')).toHaveText(label);
+      // Somebody else's deadline is marked data-own="false"; the viewer's own carries no such mark.
+      if (own) await expect(row.locator('[data-testid^="time-block-"]')).not.toHaveAttribute("data-own", "false");
+      else await expect(row.locator('[data-testid^="time-block-"]')).toHaveAttribute("data-own", "false");
       await expect(row.locator('[data-testid^="time-block-"]')).not.toHaveAttribute("data-state", "none");
     }
     // On the linked issue he is only a default contributor: a Contributing row in the same shape, waiting on the others.

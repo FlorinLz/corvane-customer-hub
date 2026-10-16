@@ -6,7 +6,8 @@ import { ACK_TARGET, COMPLIANCE_ASSESS_MINUTES, NOTIFY_TARGET_SEV2_BUSINESS_MINU
 import type { ComputedClocks, StoppedTiming } from "@/server/derived/issue-clocks";
 import { stepsFor, type IssueStep, type StepsInput } from "@/server/derived/issue-steps";
 import type { Deadline, DeadlineKey } from "@/server/derived/deadlines";
-import { PARTNER_CHASE_TARGET, REPLY_TARGET, RESOLVE_TARGET, RESTORE_TARGET, UPDATE_CADENCE, type Target } from "@/server/config";
+import { addBusinessMinutes, teamCalendar } from "@/lib/business-hours";
+import { CONFIRM_TARGET, PARTNER_CHASE_TARGET, REPLY_TARGET, REVIEW_TARGET, RESOLVE_TARGET, RESTORE_TARGET, UPDATE_CADENCE, type Target } from "@/server/config";
 
 // Role actions of an issue, for one viewer. Every issue has a small set of
 // actions, each one a person, a verb + object and a deadline; the UI answers
@@ -77,6 +78,8 @@ export interface RoleAction {
   subLineBy?: Date | null;
   /** blocked only: the days a root cause report will be due after resolution (null: the contract names none). */
   plannedDays?: number | null;
+  /** A waiting step's target in words ("1 business day"), or null when it has none. Unset: the plan falls back to the report's days. */
+  plannedText?: string | null;
   /** notify only, while the on-call person still communicates: when it passes to the customer owner. */
   onCallUntil?: Date | null;
   /** state "done" only. */
@@ -250,6 +253,8 @@ function wording(key: ActionKey, issue: RoleActionIssue, blocked: boolean): Word
     case "investigate":
       if (parent) return { label: `Investigate with ${parent.entityName} and resolve on ${issueDisplayId(parent.number)}`, shortLabel: `Investigate with ${parent.entityName} and resolve`, afterNote: blocked ? "after acknowledgement" : "until resolved" };
       if (issue.isPartnerIssue) return { label: `Investigate with ${issue.entityName} and resolve`, shortLabel: `Investigate with ${issue.entityName} and resolve`, afterNote: blocked ? "after acknowledgement" : "until resolved" };
+      // Once the service is restored the owner is watching it, not looking for the cause.
+      if (issue.restored) return { label: `Monitor and resolve ${display}`, shortLabel: "Monitor and resolve", afterNote: blocked ? "after acknowledgement" : "until resolved" };
       return { label: `Investigate and resolve ${display}`, shortLabel: "Investigate", afterNote: blocked ? "after acknowledgement" : "until resolved" };
     case "prepare_report": {
       // Open: the days the contract gave when the task was created (read once). Planned: set by the caller from the card.
@@ -262,7 +267,7 @@ function wording(key: ActionKey, issue: RoleActionIssue, blocked: boolean): Word
     case "send_report":
       return { label: `Send approved report to ${issue.entityName}`, shortLabel: `Send approved report to ${issue.entityName}` };
     case "review_report":
-      return { label: "Approve root cause report", shortLabel: "Approve root cause report", subLine: "Approve before the report is sent", afterNote: blocked ? "after the draft" : "until approved" };
+      return { label: "Approve root cause report", shortLabel: "Approve root cause report", subLine: "Approve before the report is sent", afterNote: blocked ? "after the draft is shared" : "until approved" };
     case "close": {
       // On the partner issue the communicator speaks to the partner, not a customer.
       const who = issue.isPartnerIssue ? "partner" : "customer";
@@ -338,7 +343,18 @@ function build(key: ActionKey, role: RoleName, person: ActionPerson, verb: strin
     dueAt: step?.dueAt ?? null,
     queuedUntil: step?.dueAt ? null : queuedUntil,
     state: blocked ? "blocked" : "open",
+    ...(blocked ? plannedTextOf(key, issue) : {}),
   };
+}
+
+/** What a waiting step's time column says before it starts: its target, or nothing when it has none. */
+function plannedTextOf(key: ActionKey, issue: RoleActionIssue): { plannedText: string | null } | Record<string, never> {
+  if (key === "close") {
+    const t = CONFIRM_TARGET[issue.severity];
+    return { plannedText: t ? targetText(t) : null };
+  }
+  if (key === "review_report") return { plannedText: targetText(REVIEW_TARGET) };
+  return {};
 }
 
 const deadlineOf = (issue: RoleActionIssue, key: DeadlineKey): Deadline | null => issue.deadlines?.find((d) => d.key === key) ?? null;
@@ -577,13 +593,14 @@ export function allRoleActions(issue: RoleActionIssue, now: Date): RoleAction[] 
       if (task.draftSharedAt) {
         const steps = stepsOf(reviewer, { isReportReviewer: true });
         const review = find(steps, "Approve root cause report");
-        actions.push({ ...build("review_report", "Compliance", reviewer, "Approve", "the report", issue, review, null), dateOnly: true, subLineBy: task.dueAt });
+        const built = build("review_report", "Compliance", reviewer, "Approve", "the report", issue, review, null);
+        const byTarget = addBusinessMinutes(task.draftSharedAt, REVIEW_TARGET.minutes, teamCalendar("COMPLIANCE"));
+        const due = task.dueAt && task.dueAt < byTarget ? task.dueAt : byTarget; // never later than the report's own date
+        actions.push({ ...built, dueAt: due, dateOnly: true, subLineBy: task.dueAt });
       } else {
         const a = build("review_report", "Compliance", reviewer, "Approve", "the report", issue, null, null, true);
         a.startsWhen = `Starts when ${issue.owner?.name ?? "the owner"} shares the draft`;
-        a.dueAt = task.dueAt;
-        a.dateOnly = true;
-        actions.push(a);
+        actions.push(a); // no date yet: 3 business days after the draft is shared
       }
     } else if (task?.approvedAt) {
       actions.push({
