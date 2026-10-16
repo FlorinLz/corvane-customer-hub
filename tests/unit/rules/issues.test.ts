@@ -1203,13 +1203,15 @@ describe("Issues worklist (brief 4.6.9, M20) -- the 7.1.17.8 oracles", () => {
     expect(result.reported).toHaveLength(0);
   });
 
-  it("Rachel Wong (Finance) sees ISS-1031 as Owner with the step Resolve, among her four billing issues: Issues (4), badge 4", async () => {
+  it("Rachel Wong (Finance) sees ISS-1031 as Owner with the step Reply to customer, among her four billing issues: Issues (4), badge 4", async () => {
     const rachel = await db.user.findFirstOrThrow({ where: { name: "Rachel Wong" } });
     const result = await loadWorklistIssues(rachel, "mine");
     expect(result.main.map((r) => r.number).sort()).toEqual([1021, 1022, 1024, 1031]);
     const row = result.main.find((r) => r.number === 1031)!;
     expect(row.roleLabel).toBe("Owner");
-    expect(row.stepText).toBe("Resolve");
+    // A billing question has a Reply to customer deadline (5 business days) that leads; Resolve (10 business days) is the second step.
+    expect(row.stepText).toBe("Reply to customer");
+    expect(row.moreStepsCount).toBe(1);
     expect(result.count).toBe(4);
     expect(result.badgeCount).toBe(4);
   });
@@ -1223,7 +1225,7 @@ describe("Issues worklist (brief 4.6.9, M20) -- the 7.1.17.8 oracles", () => {
     expect(result.badgeCount).toBe(1);
   });
 
-  it("Ops 'My team' scope shows one row per issue, led by the most urgent open action (Kevin Lim's, on ISS-1038 and ISS-1042)", async () => {
+  it("Ops 'My team' scope shows one row per issue, led by the most urgent open action (the customer updates, on ISS-1038 and ISS-1042)", async () => {
     // 7.1.17.8's "[Fri 02 Oct, 08:00 CEST]" row -- the one DEMO_CLOCK_START=...+03:00 (Europe/Bucharest,
     // "+03:00" is CEST+1h) actually seeds: before Emma Wilson's 09:00 CEST hand-over start, so ISS-1042's
     // on-call owner Kevin Lim is still its own communicator too. Role actions PR: My team is one row per
@@ -1233,10 +1235,12 @@ describe("Issues worklist (brief 4.6.9, M20) -- the 7.1.17.8 oracles", () => {
     const numbers = result.main.map((r) => r.number);
     expect(new Set(numbers).size).toBe(numbers.length);
     expect(numbers).toEqual(expect.arrayContaining([1038, 1042]));
+    // The lead is the one with the nearest deadline: Kevin's update on ISS-1042 (he is still its communicator), Adrian's update on ISS-1038.
+    const lead: Record<number, string> = { 1038: "Adrian Koh", 1042: "Kevin Lim" };
     for (const row of result.main.filter((r) => r.number === 1038 || r.number === 1042)) {
       expect(row.view.scope).toBe("team");
-      expect(row.view.line1).toMatchObject({ kind: "person", person: "Kevin Lim" });
-      expect(row.view.timePerson).toBe("Kevin Lim");
+      expect(row.view.line1).toMatchObject({ kind: "person", person: lead[row.number] });
+      expect(row.view.timePerson).toBe(lead[row.number]);
     }
   });
 

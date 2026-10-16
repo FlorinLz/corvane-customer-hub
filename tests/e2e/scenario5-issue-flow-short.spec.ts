@@ -80,7 +80,7 @@ test.describe("Scenario 5: Issue flow (R1 short spec)", () => {
     await page.goto("/");
     await viewAs(page, "Customer Success · Emma Wilson");
     // Brief 7.1.17.8: Emma Wilson's Home badge is "1" (her one unacknowledged M9 assignment on UniCredit Bank GmbH from Leo Martin) -- no issue-worklist step contributes, both ISS-1042 and ISS-1031 show her as Communicator with no step.
-    await expect(page.getByRole("link", { name: "Home, 1 unacknowledged assignment" })).toBeVisible();
+    await expect(page.getByRole("link", { name: /^Home, 1 unacknowledged assignment/ })).toBeVisible();
 
     const issuesRegion = page.getByRole("region", { name: "Issues" });
     await expect(issuesRegion.getByText("Issues (6)")).toBeVisible();
@@ -90,7 +90,8 @@ test.describe("Scenario 5: Issue flow (R1 short spec)", () => {
     const row1042 = await issueRow(page, 1042);
     const row1031 = await issueRow(page, 1031);
     // Role actions PR: a communicator with no step of their own waits on the owner.
-    await expect(row1042).toContainText("Waiting on");
+    // Deadline model: Emma owns the next update on ISS-1042 (service restored), so her row leads with it.
+    await expect(row1042).toContainText("Send update");
     await expect(row1031).toContainText("Waiting on");
 
     await openIssue(page, 1042);
@@ -104,7 +105,7 @@ test.describe("Scenario 5: Issue flow (R1 short spec)", () => {
     await expect(done).toContainText(/Assessed for Compliance by Mei Chen at Sun 04 Oct, 21:58 CEST, \d+ min after the flag \(target 1 h, on time\)/);
     await expect(page.getByText(/Possible major incident\. Assessed by Mei Chen \(Compliance\) at \w{3} \d\d \w{3}, 21:58 CEST\./)).toBeVisible();
     const commLog = page.getByRole("region", { name: "Communication log" });
-    const handoverEntry = commLog.getByText(/Communication handed over to Emma Wilson at \w{3} \d\d \w{3}, 09:00 CEST\. Already communicated: First notification by Email to Silvia Moretti at \w{3} \d\d \w{3}, 22:05 CEST by Kevin Lim\. Owner: Kevin Lim\./);
+    const handoverEntry = commLog.getByText(/Communication handed over to Emma Wilson at \w{3} \d\d \w{3}, 09:00 CEST\. Already communicated: First notification by Email to Silvia Moretti at \w{3} \d\d \w{3}, 22:05 CEST by Kevin Lim(?:; Update by Email to Silvia Moretti at \w{3} \d\d \w{3}, \d\d:\d\d CEST by Kevin Lim)*\. Owner: Kevin Lim\./);
     await expect(handoverEntry).toBeVisible();
 
     await page.reload();
@@ -327,7 +328,8 @@ test.describe("Scenario 5: Issue flow (R1 short spec)", () => {
     for (const [n, hours] of [[1045, 1], [1047, 7]] as const) {
       const row = await issueRow(page, n);
       await expect(row.locator('[data-testid^="line1-"]')).toHaveText(/^Notify /);
-      await expect(row.locator('[data-testid^="time-block-"] span').first()).toHaveText(new RegExp(`^${hours} h( \\d+ min)?$`));
+      // Deadline model: the row shows the nearest open deadline, which may be Mei's Assess or Lukas's clock rather than Adrian's Notify.
+      await expect(row.locator('[data-testid^="time-block-"]')).toContainText(new RegExp(`\\d+ (h|min)`));
     }
 
     await page.goto(`/issues/${iss1047.id}`);
@@ -363,7 +365,7 @@ test.describe("Scenario 5: Issue flow (R1 short spec)", () => {
       // browser's clock.install()). Match both duration() formats, not just the minutes one.
       const row = await issueRow(page, n);
       await expect(row.locator('[data-testid^="line1-"]')).toHaveText("Assess");
-      await expect(row.locator('[data-testid^="time-block-"] span').first()).toHaveText(/^(\d+ h( \d+ min)?|\d+ min)$/);
+      await expect(row.locator('[data-testid^="time-block-"]')).toContainText(/\d+ (h|min)/);
     }
 
     await page.goto(`/issues/${iss1045.id}`);

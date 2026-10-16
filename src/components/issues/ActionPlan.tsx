@@ -70,6 +70,7 @@ function DoneItem({ action, zone }: { action: RoleAction; zone: string }) {
           )
         </>
       )}
+      {action.doneNote && <> · {action.doneNote}</>}
     </>
   );
 }
@@ -125,11 +126,11 @@ function Step({ action, n, viewerId, now, zone, approve }: { action: RoleAction;
         <TimeBlock className="col-start-3 min-[1101px]:col-start-auto" dueAt={action.dueAt} now={now} zone={zone} note={null} testId={`plan-time-${action.key}`} dateOnly={action.dateOnly} />
       ) : blocked ? (
         <div data-testid={`plan-time-${action.key}`} data-state="blocked" className="col-start-3 flex min-w-0 flex-col min-[1101px]:col-start-auto">
-          <span className="text-[16px] leading-6 text-text-secondary">{action.plannedDays != null ? `${action.plannedDays} days` : "No deadline"}</span>
+          <span className="text-[16px] leading-6 text-text-secondary">{action.plannedDays != null ? `${action.plannedDays} days` : "10 business days"}</span>
           {action.afterNote && <span className="text-meta text-text-secondary">{action.afterNote}</span>}
         </div>
       ) : (
-        <TimeBlock className="col-start-3 min-[1101px]:col-start-auto" dueAt={action.dueAt} now={now} zone={zone} note={note} testId={`plan-time-${action.key}`} dateOnly={action.dateOnly} />
+        <TimeBlock className="col-start-3 min-[1101px]:col-start-auto" dueAt={action.dueAt} now={now} zone={zone} note={note} soonAt={action.clock?.soonAt} paused={action.paused ? { label: action.paused.label } : null} testId={`plan-time-${action.key}`} dateOnly={action.dateOnly} />
       )}
     </div>
   );

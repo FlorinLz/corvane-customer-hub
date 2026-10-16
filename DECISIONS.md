@@ -3111,3 +3111,36 @@ The panel used to describe a whole step for a screen the visitor might not be on
 - **Skip ahead** marks the way there as done, switches the person with the View as route and opens the page of the first move that is not navigation.
 - **Removed.** The numbered Do this block, Take me there, and the old form hints (`hints.tsx`): the bubbles replace them, including the example link help (a "type" move with Fill for me).
 - **Scenario 2's report** now picks Impact **Degraded**, which also fixes the story: the form defaulted to Down and gave a Sev-1.
+
+## Deadline model (PR "deadline-model")
+
+Home often showed a dash in the Time column, for two reasons. The column only showed the viewer's own deadline, and only five clocks existed (acknowledge, notify, assess, root cause report, approve). Nothing timed restoring or resolving the service, confirming the resolution, customer updates, chasing a partner, or the facts a regulated bank needs. Now there is a small, defined set of clocks, each with a source, and Home shows the issue's nearest deadline whoever owns it.
+
+**The clocks.** Every target is in `src/server/config.ts` with its source in a comment. All count from Corvane aware at unless stated. Sev-1 runs 24/7; every other clock counts business minutes of the person it belongs to (09:00 to 18:00, Monday to Friday, 540 minutes a day). Sev-4 has no clock apart from Acknowledge on purpose: red always means act now.
+
+| Clock | Who | Sev-1 | Sev-2 | Sev-3 | Sev-4 | Source |
+|---|---|---|---|---|---|---|
+| Acknowledge | Owner | 15 min | 60 min | 1 business day | 3 business days | unchanged |
+| Notify customer | Communicator | contract hours, else 2 h | 4 business h | none | none | unchanged |
+| Restore service | Owner | 4 h | 1 business day | none | none | standard SLA practice |
+| Resolve | Owner | none | 5 business days | 10 business days | none | standard SLA practice |
+| Customer update (repeats) | Communicator | 60 min until restored, then 4 h | 4 business h | none | none | SLA practice, DORA intermediate reporting |
+| Facts for the regulator | Communicator | contract `factsNeededHours` | none | none | none | DORA RTS 2025/301 (4 h / 24 h), FCA PS26/2 |
+| Confirm resolution | Communicator | 1 business day after resolved | 1 business day | none | none | SLA practice |
+| Partner chase (repeats) | Owner | 60 min | 4 business h | 2 business days | none | ITIL underpinning contracts |
+| Reply to customer | Owner | none | 5 business days | 5 business days | none | PSD2 Art. 101, FCA DISP (15 business days) |
+| Root cause report | Owner | contract days, else 10 business days | none | none | none | DORA final report at one month |
+
+**Where each applies.** Restore applies to an outage only (service unavailable, partner degraded, integration blocker): a wrong match, a billing question or a commercial request has nothing to restore. A linked issue created from a partner issue has no Restore, Resolve or Chase of its own; it resolves with its parent. Reply to customer is for BILLING and COMMERCIAL_COVERAGE, and replaces Restore on them. Updates are for customer issues (a partner issue is chased, not updated) once the customer has been notified, until the issue is resolved. Facts need Sev-1, a customer with a regulatory regime other than None, a Compliance assessment of a possible major incident and hours on the Customer obligations card; the clock starts at the assessment.
+
+**Steps.** "Service restored" is the owner's record (time and a short note, `POST /api/issues/<id>/restore`); it stops Restore and moves a Sev-1's update cadence from 60 minutes to 4 h. Resolve stays a separate step, and resolving an issue that was never marked restored counts as restoring it. Recording an UPDATE communication restarts the update clock; the facts step is a FACTS_PACK_SENT communication ("Record facts pack"); each communication to the partner restarts Chase; the owner records the reply on BILLING and COMMERCIAL_COVERAGE issues themselves (the communicator rule lets the owner in for those two types).
+
+**Pause.** Waiting on customer pauses Restore, Resolve and Reply to customer. Leaving that status (or resolving) adds the pause to `Issue.pausedMinutes` (wall minutes, shifts the 24/7 clocks) and `pausedBusinessMinutes` (the owner's business minutes, shifts the business clocks); `waitingOnCustomerSince` marks a pause that is running. While paused the clock has no due time, so it cannot go overdue. Waiting on partner pauses nothing and makes Chase the clock Home shows.
+
+**Display.** `src/server/derived/deadlines.ts` is pure (start, due, stop, repeat, pause, colour) and returns the clocks as deadlines; `role-actions.ts` turns them into steps (restore, update, facts, chase, reply, plus the Resolve and Confirm deadlines on the existing steps). Home's Time column shows the nearest open deadline of the issue, whoever owns it: your own as before (bold, coloured), somebody else's as secondary text, "Kevin Lim · 3 h 40 min · Restore", red only when breached. A paused clock reads "Paused · Waiting on <customer>". The dash is only for an issue with no open clock. Orange is under 60 minutes left or under 25% of the target left, whichever comes first (`soonAt`, found by bisection for business clocks); red is overdue. Sorting is unchanged: own actions first, then by deadline.
+
+**Schema.** One additive migration, `20261016090000_deadline_model`: `Issue.restoredAt`, `restoredById`, `restoreNote`, `pausedMinutes`, `pausedBusinessMinutes`. `data/sandbox-ddl.*`, `scripts/neon-rebuild.sql` and the demo snapshot are regenerated. Everything else is read from existing columns (communications, assessments, the Customer agreement card).
+
+**Seed (Mon 05 Oct 2026, 10:05 CEST).** ISS-1042 was restored at 22:30, Kevin sent the facts at 22:40 (within the contract's 2 h) and updated MPS at 23:00, 02:30 and 06:30, so Emma's next update is due at 10:30. ISS-1038 has Adrian's updates (next due 17:45 Kuala Lumpur), ISS-1020 has Lukas's contacts with ING-DiBa (chase due 16:30 Singapore) and a Friday-evening start so Restore is not overdue. No seeded persona has more than two red rows.
+
+**Default root cause report deadline.** When the Customer agreement card names no `postIncidentReportDays`, the task is due in 10 business days of the owner's calendar. The card is not changed: `reportDays` stays null so the page can say the contract named none.

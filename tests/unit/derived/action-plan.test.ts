@@ -155,9 +155,9 @@ describe("Action plan: sub-lines", () => {
     expect(v.plan.find((a) => a.key === "send_report")!.plannedDays).toBe(14);
   });
 
-  it("the contract names no days: the report step says so; Sev-1 with no contract hours reads the default; the contract is never attributed to the regulator", () => {
+  it("the contract names no days: the report step says it falls back to 10 business days; Sev-1 with no contract hours reads the default; the contract is never attributed to the regulator", () => {
     const v = roleActionsFor(linked({ reportPlan: { days: null }, notifyTargetHours: 2, notifyDefaultTarget: true }), adrian.id, NOW);
-    expect(v.plan.find((a) => a.key === "prepare_report")!.subLine).toBe("No deadline: the contract has no post-incident report period");
+    expect(v.plan.find((a) => a.key === "prepare_report")!.subLine).toBe("The contract has no report period: 10 business days after resolution");
     expect(v.plan.find((a) => a.key === "notify")!.subLine).toBe("2 h after Corvane aware at");
     for (const a of v.plan) expect(a.subLine ?? "").not.toMatch(/Required by (UK FCA|EU DORA)/);
   });

@@ -9,7 +9,7 @@ import { versionConflictMessage } from "@/server/audit/conflict";
 import { db } from "@/server/db";
 import { now, today, toLocalDate } from "@/lib/dates";
 import { computeCoverageStatus } from "@/server/derived/coverage-status";
-import { addBusinessMinutes, isInBusinessHours, teamCalendar, userCalendar } from "@/lib/business-hours";
+import { addBusinessMinutes, businessMinutesBetween, isInBusinessHours, teamCalendar, userCalendar } from "@/lib/business-hours";
 import { effectiveTimeZone, formatInZone, zoneCity, formatDateTime } from "@/lib/time-zones";
 import {
   STAGE_ORDER,
@@ -30,6 +30,7 @@ import type {
   AcknowledgeIssueInput,
   ChangeStatusInput,
   ResolveIssueInput,
+  RestoreIssueInput,
   AddContributorInput,
   RemoveContributorInput,
   ReassignIssueInput,
@@ -675,6 +676,63 @@ export async function acknowledgeIssue(user: SessionUser, issueId: string, input
   });
 }
 
+/**
+ * Closes the Waiting on customer pause of an issue that is leaving that status (or being resolved): the minutes it lasted, in wall minutes and in the
+ * owner's business minutes, are kept on the issue so Restore, Resolve and Reply to customer resume where they stopped (derived/deadlines.ts).
+ * Entering the status stamps `waitingOnCustomerSince`.
+ */
+async function pauseData(tx: Prisma.TransactionClient, issue: { status: IssueStatus; ownerId: string | null; ownerTeam: Team; waitingOnCustomerSince: Date | null; pausedMinutes: number; pausedBusinessMinutes: number }, to: IssueStatus, t: Date) {
+  if (to === "WAITING_ON_CUSTOMER" && issue.status !== "WAITING_ON_CUSTOMER") return { waitingOnCustomerSince: t };
+  if (issue.status === "WAITING_ON_CUSTOMER" && to !== "WAITING_ON_CUSTOMER") {
+    const since = issue.waitingOnCustomerSince;
+    if (!since) return { waitingOnCustomerSince: null };
+    const owner = issue.ownerId ? await tx.user.findUnique({ where: { id: issue.ownerId }, select: { timeZone: true, team: true } }) : null;
+    const cal = owner ? teamCalendar(issue.ownerTeam, owner) : teamCalendar(issue.ownerTeam);
+    const wall = Math.max(0, Math.round((t.getTime() - since.getTime()) / 60_000));
+    const business = Math.round(businessMinutesBetween(since, t, cal));
+    return { waitingOnCustomerSince: null, pausedMinutes: issue.pausedMinutes + wall, pausedBusinessMinutes: issue.pausedBusinessMinutes + business };
+  }
+  return {};
+}
+
+/**
+ * Service restored: the owner records when the service was back and a short note. It stops the Restore clock and moves the update cadence of a Sev-1
+ * from 60 min to 4 h. Resolve stays a separate step (and resolving an issue that was never marked restored counts as restoring it).
+ */
+export async function recordServiceRestored(user: SessionUser, issueId: string, input: RestoreIssueInput) {
+  const { entityId } = await requireIssueEntity(issueId, user, "issue.owner");
+  await ensureSystemWrites(issueId);
+
+  return mutate(user, { entityId }, async (tx, log) => {
+    const issue = await tx.issue.findUnique({ where: { id: issueId } });
+    if (!issue) throw new NotFoundError();
+    if (issue.version !== input.version) {
+      throw new ConflictError(await versionConflictMessage(tx, "ISSUE", issue.id, "issue"));
+    }
+    await assertIsOwner(tx, issue, user);
+    if (issue.status === "NEW") throw new ValidationError({ status: ["Acknowledge the issue first"] });
+    if (issue.status === "RESOLVED" || issue.status === "CLOSED") throw new ValidationError({ status: ["This issue is already resolved"] });
+    if (issue.restoredAt) throw new ValidationError({ status: ["The service is already recorded as restored"] });
+
+    const restoredAt = new Date(input.restoredAt);
+    const requester = await tx.user.findUnique({ where: { id: user.id }, select: { timeZone: true, team: true } });
+    const zone = requester ? effectiveTimeZone(requester) : "Europe/Bucharest";
+    if (restoredAt > now()) throw new ValidationError({ restoredAt: ["The time can't be in the future"] });
+    if (restoredAt < issue.awareAt) throw new ValidationError({ restoredAt: [`The time can't be before Corvane aware at (${formatInZone(issue.awareAt, zone)})`] });
+
+    const note = input.note?.trim() ? input.note.trim() : null;
+    const updated = await tx.issue.update({ where: { id: issue.id }, data: { restoredAt, restoredById: user.id, restoreNote: note, version: { increment: 1 } } });
+    await log.change({
+      objectType: "ISSUE",
+      objectId: issue.id,
+      objectLabel: `Issue: ${issueDisplayId(issue.number)}`,
+      fields: [{ field: "Service restored", oldValue: null, newValue: `${formatInZone(restoredAt, zone)}${note ? `: ${note}` : ""}` }],
+    });
+    await log.history({ category: "INCIDENT", issueId: issue.id, summary: `${issueDisplayId(issue.number)} service restored at ${formatInZone(restoredAt, zone)}, recorded by ${user.name}` });
+    return updated;
+  });
+}
+
 /** Brief M21 AC3, AC5. "Resolved" is handled by resolveIssue() -- never a target `status` here. */
 export async function changeIssueStatus(user: SessionUser, issueId: string, input: ChangeStatusInput) {
   const { entityId } = await requireIssueEntity(issueId, user, "issue.owner");
@@ -713,7 +771,7 @@ export async function changeIssueStatus(user: SessionUser, issueId: string, inpu
       reasonForAudit = input.reason;
     }
 
-    const updated = await tx.issue.update({ where: { id: issue.id }, data: { status: input.status, version: { increment: 1 } } });
+    const updated = await tx.issue.update({ where: { id: issue.id }, data: { status: input.status, ...(await pauseData(tx, issue, input.status, now())), version: { increment: 1 } } });
 
     await log.change({
       objectType: "ISSUE",
@@ -785,7 +843,7 @@ export async function resolveIssue(user: SessionUser, issueId: string, input: Re
     }
 
     const t = now();
-    const updated = await tx.issue.update({ where: { id: issue.id }, data: { status: "RESOLVED", resolvedAt: t, ...(enteredEvent ? { eventAt: enteredEvent } : {}), version: { increment: 1 } } });
+    const updated = await tx.issue.update({ where: { id: issue.id }, data: { status: "RESOLVED", resolvedAt: t, ...(await pauseData(tx, issue, "RESOLVED", t)), ...(enteredEvent ? { eventAt: enteredEvent } : {}), version: { increment: 1 } } });
     await tx.issueResolution.create({ data: { issueId: issue.id, rootCause: input.rootCause, solution: input.solution, resolvedAt: t, resolvedById: user.id } });
 
     const rootCauseExcerpt = input.rootCause.length > 80 ? `${input.rootCause.slice(0, 80)}...` : input.rootCause;

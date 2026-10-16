@@ -1,5 +1,5 @@
 import { db } from "@/server/db";
-import type { OnboardingState } from "@/lib/onboarding/content";
+import { SEEDED_ISS1042_UPDATES, type OnboardingState } from "@/lib/onboarding/content";
 
 const LLOYDS = "Lloyds Bank plc";
 const REVOLUT = "Revolut Ltd";
@@ -58,7 +58,7 @@ export async function loadOnboardingState(): Promise<OnboardingState> {
     seedVersion: meta?.seedVersion ?? 0,
     scenario1: {
       issueId: iss1042?.id ?? null,
-      updateRecorded: comms.some((c) => c.type === "UPDATE"),
+      updateRecorded: comms.filter((c) => c.type === "UPDATE").length > SEEDED_ISS1042_UPDATES,
       resolved: !!iss1042?.resolvedAt,
       confirmed: comms.some((c) => c.type === "CLOSURE_CONFIRMED"),
       draftShared: !!task?.draftSharedAt,

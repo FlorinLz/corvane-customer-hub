@@ -5,11 +5,13 @@ import Link from "next/link";
 import type { Severity } from "@prisma/client";
 
 import { SEVERITY_LABELS, issueDisplayId } from "@/lib/labels";
+import { Pause } from "lucide-react";
+
 import { phraseFor, timeLeft } from "@/lib/time-block";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { TimeBlock } from "@/components/issues/TimeBlock";
-import type { RoleLine, RowView } from "@/server/queries/worklist/issues";
+import type { RoleLine, RowTime, RowView } from "@/server/queries/worklist/issues";
 import { WhyThis } from "@/components/onboarding/WhyThis";
 
 function severityVariant(s: string): "danger" | "due" | "neutral-outline" {
@@ -31,6 +33,43 @@ const lowerFirst = (s: string) => (s ? s.charAt(0).toLowerCase() + s.slice(1) : 
 function contextText(line: RoleLine, now: Date): { text: string; phrase: { text: string; marker: "over" | "soon" | null } | null } {
   const phrase = phraseFor(line.dueAt ? new Date(line.dueAt) : null, now);
   return { text: `${line.role}: ${line.person}, ${lowerFirst(line.label)}`, phrase };
+}
+
+/**
+ * Somebody else's deadline in the Time column: secondary text, "Kevin Lim · 3 h 40 min · Restore". It turns red only when breached. A paused clock
+ * reads "Paused · Waiting on <customer>" with a pause icon.
+ */
+function OtherDeadline({ time, now, entityName, muted, testId }: { time: RowTime; now: Date; entityName: string; muted: boolean; testId: string }) {
+  if (time.paused) {
+    return (
+      <div data-testid={testId} data-state="paused" data-own="false" className="flex min-w-0 flex-col text-meta text-text-secondary">
+        <span className="font-medium">{time.person}</span>
+        <span className="inline-flex items-center gap-1">
+          <Pause className="size-3.5 shrink-0" aria-hidden="true" />
+          Paused · Waiting on {entityName}
+        </span>
+        <span>{time.label}</span>
+      </div>
+    );
+  }
+  const left = timeLeft(time.dueAt ? new Date(time.dueAt) : null, now);
+  const red = left.state === "over" && !muted;
+  const duration = left.state === "over" ? left.text.replace(/^Overdue /, "") : left.text;
+  return (
+    <div data-testid={testId} data-state={left.state} data-own="false" className="flex min-w-0 flex-col text-meta text-text-secondary">
+      <span className="font-medium">{time.person}</span>
+      <span className={cn(red && "font-semibold text-danger")}>
+        {left.state === "over" ? (
+          <>
+            Overdue {duration}
+          </>
+        ) : (
+          duration
+        )}
+      </span>
+      <span>{time.label}</span>
+    </div>
+  );
 }
 
 /** The table's header row: five columns, four below 1100 px. */
@@ -81,7 +120,11 @@ export function IssueRow({
   // Accent bar: only for a deadline that is overdue or under an hour away.
   // A Resolved or Closed row is not urgent: no accent bar, no red time, a muted Sev badge.
   const finished = view.statusNote !== null;
-  const accent = finished ? "" : left.state === "over" ? "shadow-[inset_4px_0_0_var(--color-danger)]" : left.state === "soon" ? "shadow-[inset_4px_0_0_var(--color-due-soon)]" : "";
+  // Somebody else's deadline only paints the row when it is breached; your own also when it is orange (under 60 minutes, or under 25% of its target).
+  const soonAt = view.time?.soonAt ? new Date(view.time.soonAt) : null;
+  const ownState = left.state === "default" && soonAt && now >= soonAt ? "soon" : left.state;
+  const barState = view.time && !view.time.own ? (left.state === "over" ? "over" : "default") : ownState;
+  const accent = finished || view.time?.paused ? "" : barState === "over" ? "shadow-[inset_4px_0_0_var(--color-danger)]" : barState === "soon" ? "shadow-[inset_4px_0_0_var(--color-due-soon)]" : "";
   const note = view.scope === "team" ? view.timePerson : dueAt ? null : "for you";
 
   const context = view.line2.slice(0, 2).map((l) => ({ line: l, ...contextText(l, now) }));
@@ -121,7 +164,22 @@ export function IssueRow({
         {view.linkedTo && <span className="text-meta text-text-secondary">Linked to {view.linkedTo}</span>}
       </div>
 
-      <TimeBlock dueAt={dueAt} now={now} zone={zone} note={note} dateOnly={view.timeDateOnly} compact muted={finished} testId={`time-block-${issueId}`} />
+      {view.time && !view.time.own ? (
+        <OtherDeadline time={view.time} now={now} entityName={view.entityName} muted={finished} testId={`time-block-${issueId}`} />
+      ) : (
+        <TimeBlock
+          dueAt={dueAt}
+          now={now}
+          zone={zone}
+          note={note}
+          dateOnly={view.timeDateOnly}
+          compact
+          muted={finished}
+          soonAt={view.time?.soonAt ? new Date(view.time.soonAt) : null}
+          paused={view.time?.paused ? { label: `Waiting on ${view.entityName}` } : null}
+          testId={`time-block-${issueId}`}
+        />
+      )}
 
       {/* Wide: Description and Customer are two columns. */}
       <div className="hidden min-w-0 text-body min-[1101px]:block" data-testid={`desc-${issueId}`} title={`${view.typeLabel}\n${view.descriptionLine}`}>

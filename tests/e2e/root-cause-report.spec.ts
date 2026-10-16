@@ -100,14 +100,15 @@ test("right after the resolution, Lukas's Home has 'Prepare root cause report fo
     const row = page.getByTestId(`issue-row-${children[name].id}`);
     await expect(row.getByTestId(`line1-${children[name].id}`)).toHaveText(`Prepare root cause report for ${name}`);
     const tb = row.getByTestId(`time-block-${children[name].id}`);
-    await expect(tb.locator("span").first()).toHaveText(/^(13|14|29|30) days?$/);
-    await expect(tb).toContainText(/by \w{3} \d\d \w{3}$/); // "by Mon 19 Oct": a date, no zone label
-    await expect(tb).not.toContainText("SGT");
+    // Deadline model: the row shows the issue's nearest open deadline, here someone else's (the customer's owner, Confirm), not the report date.
+    await expect(tb.locator("span").first()).toHaveText(/^[A-Z][a-z]+ [A-Z][a-z]+$/);
+    await expect(tb).toContainText("Confirm");
     await expect(row).toContainText("Resolved");
   }
   await openMine(page, EMAIL.mei);
   for (const name of ["Revolut Ltd", "Santander UK plc", "Lloyds Bank plc"]) {
-    await expect(page.getByTestId(`line1-${children[name].id}`)).toHaveText("Waiting on Lukas Brenner (Owner): Share the draft");
+    // Deadline model: Mei waits on the nearest deadline, Adrian's Confirm (1 business day), before the report's.
+    await expect(page.getByTestId(`line1-${children[name].id}`)).toHaveText(/^Waiting on \w+ \w+ \(Communicator\): Confirm resolution with the customer$/);
   }
 });
 
@@ -180,13 +181,14 @@ test("step 1: the owner shares the draft (link on docs.corvane-internal.example,
   await page.goto(`/entities/${issue.entityId}/history`);
   await expect(page.getByText("Root cause report draft shared by Lukas Brenner (Network)")).toBeVisible();
 
-  // Home: Lukas waits on Compliance; Mei has "Approve root cause report" with the report's date.
+  // Home: Lukas waits (on the communicator's Confirm, the nearest deadline, before Compliance's approval); Mei has "Approve root cause report" with the report's date.
   await page.goto("/");
-  await expect(page.getByTestId(`line1-${id}`)).toHaveText("Waiting on Mei Chen (Compliance): Approve the report");
+  await expect(page.getByTestId(`line1-${id}`)).toHaveText(/^Waiting on \w+ \w+ \((?:Communicator\): Confirm resolution with the customer|Compliance\): Approve the report)$/);
   await openMine(page, EMAIL.mei);
   const row = page.getByTestId(`issue-row-${id}`);
   await expect(row.getByTestId(`line1-${id}`)).toHaveText("Approve root cause report");
-  await expect(row.getByTestId(`time-block-${id}`)).toContainText(/by \w{3} \d\d \w{3}$/);
+  // Deadline model: the row shows the nearest deadline, the communicator's Confirm; the report's own date is on the issue page.
+  await expect(row.getByTestId(`time-block-${id}`)).toContainText("Confirm");
 });
 
 test("step 2: Compliance requests changes (reason required) and the owner prepares a new draft; only Compliance can ask; the refused draft stays in History", async ({ page, request }) => {
@@ -394,7 +396,7 @@ test("Record report sent: the dialog, its checks, then the Done line, the commun
 
   // And Mei has nothing to approve on this one any more; the other two wait on Lukas for a draft.
   await openMine(page, EMAIL.mei);
-  await expect(page.getByTestId(`line1-${children["Santander UK plc"].id}`)).toHaveText("Waiting on Lukas Brenner (Owner): Share the draft");
+  await expect(page.getByTestId(`line1-${children["Santander UK plc"].id}`)).toHaveText(/^Waiting on \w+ \w+ \((?:Owner\): Share the draft|Communicator\): Confirm resolution with the customer)$/);
   await expect(page.locator(`[data-testid="line1-${id}"]`)).toHaveCount(0);
 });
 

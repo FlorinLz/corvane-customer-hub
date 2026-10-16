@@ -33,7 +33,7 @@ test.describe("Scenario 4: CSM day (R1 short spec)", () => {
     // Step 1: viewAs CS. Home badge "1"; "Ownership assigned to you" (UniCredit Bank GmbH from Leo Martin); "Renewals in the next 120 days" (UniCredit Overdue first, MPS 61-90 days).
     await page.goto("/");
     await viewAs(page, "Customer Success · Emma Wilson");
-    await expect(page.getByRole("link", { name: "Home, 1 unacknowledged assignment" })).toBeVisible();
+    await expect(page.getByRole("link", { name: /^Home, 1 unacknowledged assignment/ })).toBeVisible();
 
     const assignedSection = page.locator("#worklist-ownership-assigned");
     const uniCreditRow = assignedSection.getByText("UniCredit Bank GmbH").locator("..");
@@ -50,7 +50,7 @@ test.describe("Scenario 4: CSM day (R1 short spec)", () => {
     // Step 2: Acknowledge the UniCredit Bank GmbH assignment -- row leaves without reload, badge hidden.
     await uniCreditRow.getByRole("button", { name: "Acknowledge" }).click();
     await expect(page.locator("#worklist-ownership-assigned").getByText("UniCredit Bank GmbH")).toHaveCount(0);
-    await expect(page.getByRole("link", { name: "Home", exact: true })).toBeVisible();
+    await expect(page.getByRole("link", { name: /^Home(,|$)/ })).toBeVisible();
 
     // Step 3: open the MPS renewal row -- Details, Customer role card, renewal date editable for CS.
     await renewalsSection.getByText(/Banca Monte dei Paschi di Siena S\.p\.A\./).locator("..").getByRole("link", { name: "Open" }).click();

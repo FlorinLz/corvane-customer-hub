@@ -413,6 +413,7 @@ model User {
   issuesOwned                   Issue[]                @relation("IssueOwner")
   issuesAcknowledged            Issue[]                @relation("IssueAcknowledgedBy")
   issuesClosed                  Issue[]                @relation("IssueClosedBy")
+  issuesRestored                Issue[]                @relation("IssueRestoredBy")
   issuesToAssess                Issue[]                @relation("IssueComplianceAssessor")
   issuesTakenOver               Issue[]                @relation("IssueTakenOverBy")
   issueResolutions              IssueResolution[]      @relation("IssueResolutionBy")
@@ -1109,13 +1110,21 @@ model Issue {
   complianceVisibleFrom  DateTime? @db.Timestamptz(3) // rule 4 for a flag below Sev-1 out of Compliance hours
   complianceClosedAt     DateTime? @db.Timestamptz(3) // "Neither"
 
+  // Restore service (the deadline model): the owner records when the service was back, before or with Resolve
+  restoredAt   DateTime? @db.Timestamptz(3)
+  restoredById String?
+  restoredBy   User?     @relation("IssueRestoredBy", fields: [restoredById], references: [id])
+  restoreNote  String?   @db.VarChar(500)
+
   // Resolution and closure
   resolvedAt             DateTime? @db.Timestamptz(3)
   closedAt               DateTime? @db.Timestamptz(3)
   closedById             String?
   closedBy               User?     @relation("IssueClosedBy", fields: [closedById], references: [id])
   closedAutomatically    Boolean   @default(false) // R2
-  waitingOnCustomerSince DateTime? @db.Timestamptz(3) // R2 "Remind customer" count
+  waitingOnCustomerSince DateTime? @db.Timestamptz(3) // set while the status is Waiting on customer: Restore, Resolve and Reply to customer are paused since then
+  pausedMinutes          Int       @default(0) // wall minutes the issue spent Waiting on customer, closed pauses only (clocks that run 24/7 shift by it)
+  pausedBusinessMinutes  Int       @default(0) // the same pauses in the owner's business minutes (clocks that count business hours shift by it)
   remindedAt             DateTime? @db.Timestamptz(3) // R2
 
   groupReportId    String?

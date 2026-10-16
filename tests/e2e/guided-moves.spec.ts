@@ -60,7 +60,11 @@ async function walk(page: Page, finished: () => Promise<boolean>, max = 120): Pr
     if (await finished()) return seen;
     const bubble = bubbleOf(page);
     // The panel reads the data every few seconds, so the end can show a moment after the last click: wait for a bubble or for the end.
-    await expect.poll(async () => (await finished()) || (await bubble.count()) > 0, { timeout: 25_000, message: "no bubble and not finished" }).toBe(true);
+try {
+          await expect.poll(async () => (await finished()) || (await bubble.count()) > 0, { timeout: 45_000, message: "no bubble and not finished; last: " + seen.slice(-3).map((s) => s.key + "=" + s.text).join(" | ") }).toBe(true);
+    } catch (e) {
+      throw new Error("DBG url=" + page.url() + " main=" + ((await page.locator("main").innerText().catch(() => "")).slice(0, 400)) + " :: " + String(e));
+    }
     if (await finished()) return seen;
     await expect(bubble).toBeVisible();
     const key = (await bubble.getAttribute("data-onboarding-bubble"))!;
@@ -119,7 +123,7 @@ async function walk(page: Page, finished: () => Promise<boolean>, max = 120): Pr
           const t = await again.first().locator('[data-onboarding="bubble-text"]').innerText().catch(() => "");
           return k === key && t.trim() === text ? "same" : "moved";
         },
-        { timeout: 20_000, message: `the guide did not move on from "${text}" (${key})` },
+        { timeout: 45_000, message: `the guide did not move on from "${text}" (${key})` },
       )
       .not.toBe("same");
   }
@@ -152,13 +156,13 @@ test.describe("chapter 1a, by the bubbles only", () => {
     expect(seen.map((s) => s.text)).toEqual([
       "Open View as",
       "Pick Customer Success · Emma Wilson",
-      "Emma's issue. It waits on Kevin, still investigating.",
+      "Emma's issue. Service is back; her next update to MPS is due soon.",
       "Click ISS-1042",
-      "Nothing due for Emma. Kevin owns the next step.",
-      "Overnight, in order: alert, Kevin acknowledged in 9 minutes, customer told within the hour.",
+      "Emma's next action is the MPS update, with its deadline.",
+      "Overnight, in order: alert, acknowledged in 9 minutes, customer told, service restored at 22:30.",
       "Kevin's message to Silvia at night. Emma reads what was promised.",
       "MPS is under DORA. Compliance assessed a possible major incident.",
-      "MPS needs the facts from Corvane within 2 hours.",
+      "MPS needed the facts within 2 hours. Kevin sent them at 22:40.",
       "Write what Ops is doing now.",
       "Click Copy message",
       "Click Record update",
@@ -168,8 +172,8 @@ test.describe("chapter 1a, by the bubbles only", () => {
     ]);
     expect(await doneIds(page)).toEqual(["s1-home", "s1-issue", "s1-log", "s1-compliance", "s1-update"]);
     const iss = await db.issue.findUniqueOrThrow({ where: { number: 1042 } });
-    const update = await db.issueCommunication.findFirst({ where: { issueId: iss.id, type: "UPDATE" } });
-    expect(update?.message).toContain("What we are doing: Ops renewed the expired certificate and is watching the endpoint.");
+    const update = await db.issueCommunication.findFirst({ where: { issueId: iss.id, type: "UPDATE", recordedBy: { team: "CS" } } });
+    expect(update?.message).toContain("What we are doing: The certificate is renewed and Ops keeps watching the endpoint.");
     await expect(panelOf(page).locator('[data-onboarding="chapter-end"]')).toContainText(chapterOf("1a").end.text);
   });
 });

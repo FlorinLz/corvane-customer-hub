@@ -42,7 +42,7 @@ const POLL_MS = 3_000;
 /** A guide must stay the same this long before its bubble shows. */
 const GUIDE_SETTLE_MS = 400;
 /** How long a move whose target is missing is waited for (the page may still be loading) before it is skipped. */
-const WAIT_BEFORE_SKIP_MS = 3_000;
+const WAIT_BEFORE_SKIP_MS = 20_000;
 const PANEL_WIDTH = 360;
 
 interface PanelPref {

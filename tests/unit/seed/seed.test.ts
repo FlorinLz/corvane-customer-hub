@@ -419,9 +419,11 @@ describe("Issue flow seed (7.1.17.5, milestone 6A)", () => {
     expect(issue.notifyRequired).toBe(true);
     expect(issue.notifyTargetBusinessMins).toBe(240);
     expect(issue.notifiedAt).not.toBeNull();
-    expect(issue.communications).toHaveLength(1);
-    expect(issue.communications[0].type).toBe("FIRST_NOTIFICATION");
-    expect(issue.communications[0].personName).toBe("Priya Nair");
+    // The first notification, then Adrian's updates (every 4 business hours at Sev-2); the last one, Monday 13:45 Kuala Lumpur, makes the next due at 17:45.
+    const byTime = [...issue.communications].sort((a, b) => a.occurredAt.getTime() - b.occurredAt.getTime());
+    expect(byTime.map((c) => c.type)).toEqual(["FIRST_NOTIFICATION", "UPDATE", "UPDATE"]);
+    expect(byTime.every((c) => c.personName === "Priya Nair")).toBe(true);
+    expect(issue.restoredAt).toBeNull(); // a wrong match has no service to restore
     expect(issue.complianceFlaggedAt).toBeNull();
   });
 
@@ -474,8 +476,13 @@ describe("Issue flow seed (7.1.17.5, milestone 6A)", () => {
     expect(issue.notifyRequired).toBe(true);
     expect(issue.notifyTargetHours).toBe(6); // MPS card's incident notice time
     expect(issue.notifiedAt).not.toBeNull();
-    expect(issue.communications).toHaveLength(1);
-    expect(issue.communications[0].personName).toBe("Silvia Moretti");
+    // The night, as the deadline model reads it: notified 22:05, facts for the regulator at 22:40 (within the 2 h), updates at 23:00, 02:30 and 06:30.
+    const byTime = [...issue.communications].sort((a, b) => a.occurredAt.getTime() - b.occurredAt.getTime());
+    expect(byTime.map((c) => c.type)).toEqual(["FIRST_NOTIFICATION", "FACTS_PACK_SENT", "UPDATE", "UPDATE", "UPDATE"]);
+    expect(byTime.every((c) => c.personName === "Silvia Moretti")).toBe(true);
+    expect(issue.restoredAt).not.toBeNull(); // Kevin restored the service at 22:30
+    expect(issue.restoreNote).toContain("certificate renewed");
+    expect(issue.resolvedAt).toBeNull(); // still monitoring: chapter 1b resolves it
     expect(issue.complianceFlaggedAt).not.toBeNull();
     expect(issue.complianceReasons).toEqual(["Sev-1 at a regulated customer (EU DORA)"]);
     expect(issue.assessments).toHaveLength(1);

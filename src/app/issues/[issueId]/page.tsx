@@ -25,6 +25,7 @@ import { DegradedProposalBanner } from "@/components/issues/DegradedProposalBann
 import { AffectedCustomersPanel } from "@/components/issues/AffectedCustomersPanel";
 import { LinkedIssuesPanel } from "@/components/issues/LinkedIssuesPanel";
 import { DualRoleBanner } from "@/components/issues/DualRoleBanner";
+import { REPLY_ISSUE_TYPES } from "@/server/config";
 
 export default async function IssuePage({ params, searchParams }: { params: Promise<{ issueId: string }>; searchParams: Promise<{ reported?: string }> }) {
   const { issueId } = await params;
@@ -279,6 +280,10 @@ export default async function IssuePage({ params, searchParams }: { params: Prom
             contacts={pageData.contacts}
             viewerZone={clocksCtx.viewerZone}
             resolvedAt={issue.resolvedAt}
+            nextUpdate={pageData.deadlines.find((d) => d.key === "update" && d.state === "open")?.dueAt ?? null}
+            factsOpen={pageData.deadlines.some((d) => d.key === "facts" && d.state === "open")}
+            ownerMayReply={roles.isOwner && (REPLY_ISSUE_TYPES as string[]).includes(issue.type)}
+            serverNow={pageData.serverNow}
           />
 
           <CommunicationLogCard

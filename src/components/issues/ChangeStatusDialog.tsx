@@ -124,7 +124,7 @@ export function ChangeStatusDialog({
       }}
     >
       {!controlled && (
-        <Button variant="secondary" disabled={disabled} disabledReason={currentStatus === "NEW" ? "Acknowledge first" : "The issue is closed"} onClick={() => setOpen(true)}>
+        <Button data-onboarding="change-status" variant="secondary" disabled={disabled} disabledReason={currentStatus === "NEW" ? "Acknowledge first" : "The issue is closed"} onClick={() => setOpen(true)}>
           Change status
         </Button>
       )}
@@ -135,7 +135,7 @@ export function ChangeStatusDialog({
             {STATUS_OPTIONS.map((s) => {
               const isCurrent = s === currentStatus;
               return (
-                <label key={s} className={`flex items-center gap-1.5 text-body ${isCurrent ? "opacity-45" : ""}`}>
+                <label key={s} data-onboarding="status-option" className={`flex items-center gap-1.5 text-body ${isCurrent ? "opacity-45" : ""}`}>
                   <input type="radio" name="change-status" checked={status === s} disabled={isCurrent} onChange={() => setStatus(s)} className="size-4 accent-primary" />
                   {ISSUE_STATUS_LABELS[s]}
                   {isCurrent && " (current)"}

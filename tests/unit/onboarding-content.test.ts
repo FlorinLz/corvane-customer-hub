@@ -19,6 +19,7 @@ import {
   chapterOf,
   currentStepIndex,
   doneFromData,
+  SEEDED_ISS1042_UPDATES,
   UPDATE_PLACEHOLDER,
   parseTarget,
   splitBold,
@@ -205,6 +206,11 @@ describe("the moves", () => {
       const tab = name.endsWith("-tab") && code.includes("data-onboarding={`${tab.key}-tab`}") && code.includes(`key: "${name.replace(/-tab$/, "")}"`);
       expect(direct || tab, `no data-onboarding="${name}" in src`).toBe(true);
     }
+  });
+
+  it("knows how many updates the seed already holds on ISS-1042", () => {
+    const seeded = ISSUES.find((i) => i.number === 1042)!.communications.filter((c) => c.type === "UPDATE").length;
+    expect(SEEDED_ISS1042_UPDATES).toBe(seeded);
   });
 
   it("keeps the update message's placeholder in step with the server's", async () => {

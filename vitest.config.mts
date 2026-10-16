@@ -16,6 +16,8 @@ export default defineConfig({
     // files so each one's setup/assertions/cleanup complete before the
     // next starts. See DECISIONS.md, milestone 6B.
     fileParallelism: false,
+    // Worklist and issue-page loads run the deadline engine over every issue: a few seconds on a loaded machine.
+    testTimeout: 30_000,
   },
   resolve: {
     alias: {

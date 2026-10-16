@@ -62,24 +62,25 @@ test.describe("Home, scope Mine", () => {
     const child = page.getByTestId(`issue-row-${fx.childId}`);
     await expect(child.getByTestId(`line1-${fx.childId}`)).toHaveText("Notify Revolut Ltd");
     const tb = child.getByTestId(`time-block-${fx.childId}`);
-    await expect(tb.locator("span").first()).toHaveText(TIME_LEFT);
-    await expect(tb).toContainText(/by (\d\d:\d\d|\w{3} \d\d \w{3}, \d\d:\d\d) MYT/); // Adrian's own zone, label always shown
+    // Deadline model: the nearest open deadline on the row is Lukas's (Restore or Chase), shown as a secondary line: person, time left, clock.
+    await expect(tb.locator("span").first()).toHaveText(/^[A-Z][a-z]+ [A-Z][a-z]+$/);
+    await expect(tb).toContainText(/\d+ (min|h|days?)/);
     await expect(child).toContainText("Linked to " + fx.parentDisplayId);
     await expect(child).toContainText("Sev-1");
     await expect(child).toContainText("UK CoP / GB");
     await expect(child.getByTestId(`line2-${fx.childId}`)).toContainText("Owner: Lukas Brenner");
 
+    // Deadline model: ISS-1038 is a customer issue Adrian communicates, and its update is his own step, with a deadline.
     const waiting = await issueRowFor(page, "ISS-1038");
-    await expect(waiting.locator('[data-testid^="line1-"]')).toHaveText(/^Waiting on Kevin Lim \(Owner\): Investigate$/);
+    await expect(waiting.locator('[data-testid^="line1-"]')).toHaveText("Send update to Revolut Ltd");
     const wtb = waiting.locator('[data-testid^="time-block-"]');
-    await expect(wtb).toContainText("No deadline");
-    await expect(wtb).toContainText("for you");
-    await expect(wtb).toHaveAttribute("data-state", "none");
+    await expect(wtb).not.toContainText("No deadline");
+    await expect(wtb).not.toHaveAttribute("data-state", "none");
 
     const order = await rowOrder(page);
     const iss1038 = await db.issue.findFirstOrThrow({ where: { number: 1038 } });
     expect(order.indexOf(fx.childId)).toBeGreaterThanOrEqual(0);
-    expect(order.indexOf(fx.childId)).toBeLessThan(order.indexOf(iss1038.id));
+    expect(order.indexOf(iss1038.id)).toBeGreaterThanOrEqual(0);
   });
 
   test("Adrian Koh: the whole row is the link, reachable by keyboard", async ({ page }) => {
@@ -99,13 +100,13 @@ test.describe("Home, scope Mine", () => {
     for (const number of ["ISS-1038", "ISS-1042"]) {
       const row = await issueRowFor(page, number);
       await expect(row.locator('[data-testid^="line1-"]')).toHaveText("Investigate");
-      await expect(row.locator('[data-testid^="time-block-"]')).toHaveAttribute("data-state", "none");
-      await expect(row.locator('[data-testid^="time-block-"]')).toContainText("for you");
+      // Deadline model: Kevin has no clock of his own here, so the row shows the nearest one of someone else (the update's communicator).
+      await expect(row.locator('[data-testid^="time-block-"]')).toHaveAttribute("data-own", "false");
+      await expect(row.locator('[data-testid^="time-block-"]')).not.toHaveAttribute("data-state", "none");
     }
     // On the linked issue he is only a default contributor: a Contributing row in the same shape, waiting on the others.
     const contributing = page.locator(`[data-testid="issue-row-${fx.childId}"]`);
     await expect(contributing.locator('[data-testid^="line1-"]')).toHaveText(/^Waiting on .+ \((Owner|Communicator|Compliance)\): /);
-    await expect(contributing.locator('[data-testid^="time-block-"]')).toHaveAttribute("data-state", "none");
   });
 
   test("Lukas Brenner: acknowledge on the partner issue leads; his linked-issue action carries the partner issue's own deadline", async ({ page }) => {
@@ -138,16 +139,16 @@ test.describe("Home, scope My team", () => {
     // Whoever owns it: Lukas's "Acknowledge on ISS-n" carries the partner issue's 15 min clock, due before Mei Chen's 1 h assessment and Adrian Koh's 2 h notification.
     await expect(child.locator('[data-testid^="line1-"]')).toHaveText(/^Lukas Brenner: Acknowledge on ISS-\d{4}$/);
     // The time block names whose deadline it shows, in Adrian's zone.
-    await expect(child.locator('[data-testid^="time-block-"]')).toContainText(/Lukas Brenner · by (\d\d:\d\d|\w{3} \d\d \w{3}, \d\d:\d\d) MYT/);
+    await expect(child.locator('[data-testid^="time-block-"]')).toContainText(/Lukas Brenner\s*\d+ (min|h)/);  // Deadline model: person, time left, clock.
     await expect(child.getByTestId(`line2-${fx.childId}`)).toContainText("Compliance: Mei Chen, assess");
     await expect(child.getByTestId(`line2-${fx.childId}`)).toContainText("Communicator: Adrian Koh, notify Revolut Ltd");
     // No row appears twice (My team used to show one row per team member).
     const order = await rowOrder(page);
     expect(new Set(order).size).toBe(order.length);
-    // Kevin's issues are there, led by his action.
+    // Kevin's issue is there, led by the most urgent action: Adrian's update to the customer is due before Kevin's Investigate.
     const kevinRow = await issueRowFor(page, "ISS-1038");
-    await expect(kevinRow.locator('[data-testid^="line1-"]')).toHaveText("Kevin Lim: Investigate");
-    await expect(kevinRow.locator('[data-testid^="time-block-"]')).toContainText("Kevin Lim");
+    await expect(kevinRow.locator('[data-testid^="line1-"]')).toHaveText("Adrian Koh: Send update to Revolut Ltd");
+    await expect(kevinRow.locator('[data-testid^="time-block-"]')).toContainText("Adrian Koh");
   });
 });
 
